@@ -17,10 +17,13 @@
                     <th>外协厂名称</th>
                     <th>联系人</th>
                     <th>联系电话</th>
-                    <th>地址</th>
                     <th>月产能</th>
                     <th>当前未完成</th>
                     <th>产能利用率</th>
+                    <th>待申请</th>
+                    <th>待审批</th>
+                    <th>待付款</th>
+                    <th>未结金额</th>
                     <th>状态</th>
                     <th>操作</th>
                 </tr>
@@ -32,7 +35,6 @@
                     <td class="font-bold">{{ s.name }}</td>
                     <td>{{ s.contact or '-' }}</td>
                     <td>{{ s.phone or '-' }}</td>
-                    <td>{{ s.address or '-' }}</td>
                     <td>{{ s.monthly_capacity }} 件</td>
                     <td>
                         <span class="{% if item.overloaded %}text-danger font-bold{% else %}text-success{% endif %}">
@@ -49,6 +51,10 @@
                             <div class="text-small text-muted mt-10">{{ item.capacity_ratio }}</div>
                         </div>
                     </td>
+                    <td class="font-bold" style="color:#667eea">¥{{ '%.2f'|format(item.pending_apply) }}</td>
+                    <td class="font-bold" style="color:#f5576c">¥{{ '%.2f'|format(item.pending_approve) }}</td>
+                    <td class="font-bold" style="color:#4facfe">¥{{ '%.2f'|format(item.pending_pay) }}</td>
+                    <td class="font-bold text-success">¥{{ '%.2f'|format(item.unsettled) }}</td>
                     <td>
                         {% if item.overloaded %}
                         <span class="badge" style="background:#fde8e8;color:#c0392b">⚠️ 产能过载</span>

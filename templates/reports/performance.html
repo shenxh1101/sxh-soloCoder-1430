@@ -12,6 +12,15 @@
 <div class="filter-bar">
     <form method="get" class="flex gap-10 flex-wrap align-center" style="width:100%">
         <div class="form-group">
+            <label>外协厂</label>
+            <select name="supplier_id" class="form-control">
+                <option value="">全部外协厂</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}" {% if supplier_filter == s.id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
             <label>起始日期</label>
             <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
         </div>
@@ -89,11 +98,7 @@
                         </div>
                     </td>
                     <td>
-                        {% if item.avg_cycle > 0 %}
                         <span class="font-bold">{{ '%.1f'|format(item.avg_cycle) }} 天</span>
-                        {% else %}
-                        <span class="text-muted">-</span>
-                        {% endif %}
                     </td>
                     <td class="font-bold text-success">¥{{ '%.2f'|format(item.total_value) }}</td>
                     <td>
@@ -131,6 +136,122 @@
 </div>
 
 <div class="card">
+    <div class="card-header">
+        <h2>📊 月度趋势视图（近6个月）</h2>
+    </div>
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>外协厂</th>
+                    <th>指标</th>
+                    {% for month in month_labels %}
+                    <th>{{ month }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in report_data %}
+            {% set s = item.supplier %}
+                <tr style="background:#f0f4f8">
+                    <td class="font-bold" rowspan="3" style="vertical-align:middle">{{ s.name }}</td>
+                    <td class="font-bold" style="color:#2c7be5">📅 按时交付率</td>
+                    {% for month in month_labels %}
+                    {% set mdata = item.monthly_trend.get(month, {}) %}
+                    <td>
+                        {% if mdata.completed > 0 %}
+                            <span class="{% if mdata.on_time_rate >= 95 %}text-success{% elif mdata.on_time_rate >= 80 %}text-warning{% else %}text-danger{% endif %}">
+                                {{ '%.0f'|format(mdata.on_time_rate) }}%
+                            </span>
+                            <span class="text-small text-muted"> ({{ mdata.on_time }}/{{ mdata.completed }})</span>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-bold" style="color:#28a745">✅ 一次合格率</td>
+                    {% for month in month_labels %}
+                    {% set mdata = item.monthly_trend.get(month, {}) %}
+                    <td>
+                        {% if mdata.inspected > 0 %}
+                            <span class="{% if mdata.first_pass_rate >= 95 %}text-success{% elif mdata.first_pass_rate >= 80 %}text-warning{% else %}text-danger{% endif %}">
+                                {{ '%.0f'|format(mdata.first_pass_rate) }}%
+                            </span>
+                            <span class="text-small text-muted"> ({{ mdata.first_pass }}/{{ mdata.inspected }})</span>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                <tr style="border-bottom:2px solid #e3e6ea">
+                    <td class="font-bold" style="color:#6c757d">⏱️ 平均周期</td>
+                    {% for month in month_labels %}
+                    {% set mdata = item.monthly_trend.get(month, {}) %}
+                    <td>
+                        {% if mdata.completed > 0 %}
+                            <span>{{ '%.1f'|format(mdata.avg_cycle) }} 天</span>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="form-row" style="margin-top:20px">
+        {% for item in report_data %}
+        {% set s = item.supplier %}
+        <div style="flex:1;min-width:300px">
+            <h4 style="margin-bottom:10px;color:#2c3e50">{{ s.name }} - 月度详情</h4>
+            <div class="table-wrapper">
+                <table class="data-table text-small">
+                    <thead>
+                        <tr>
+                            <th>月份</th>
+                            <th>完成单数</th>
+                            <th>按时交付率</th>
+                            <th>一次合格率</th>
+                            <th>平均周期</th>
+                            <th>完成金额</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month, mdata in item.monthly_trend.items() %}
+                        <tr>
+                            <td class="font-bold">{{ month }}</td>
+                            <td>{{ mdata.completed }}</td>
+                            <td>
+                                {% if mdata.completed > 0 %}
+                                    {{ '%.1f'|format(mdata.on_time_rate) }}%
+                                {% else %}-{% endif %}
+                            </td>
+                            <td>
+                                {% if mdata.inspected > 0 %}
+                                    {{ '%.1f'|format(mdata.first_pass_rate) }}%
+                                {% else %}-{% endif %}
+                            </td>
+                            <td>
+                                {% if mdata.completed > 0 %}
+                                    {{ '%.1f'|format(mdata.avg_cycle) }}天
+                                {% else %}-{% endif %}
+                            </td>
+                            <td>¥{{ '%.2f'|format(mdata.total_value) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="card">
     <div class="card-header"><h2>💡 指标说明</h2></div>
     <div class="form-row">
         <div>
@@ -147,7 +268,7 @@
             <h4 style="margin-bottom:10px;color:#2c3e50">✅ 一次合格率</h4>
             <p class="text-small" style="color:#555;line-height:1.8">
                 一次质检合格订单数 ÷ 质检订单数 × 100%<br>
-                不合格数量为0视为一次合格<br>
+                所有质检记录不合格数量均为0视为一次合格<br>
                 <span class="text-success">≥95% 优秀</span> / 
                 <span class="text-warning">≥80% 良好</span> / 
                 <span class="text-danger">＜80% 需改进</span>
@@ -156,9 +277,9 @@
         <div>
             <h4 style="margin-bottom:10px;color:#2c3e50">⏱️ 平均加工周期</h4>
             <p class="text-small" style="color:#555;line-height:1.8">
-                从接单到质检完成的平均天数<br>
-                反映外协厂的加工效率<br>
-                周期越短说明加工效率越高
+                从接单到质检完成的平均天数（按实际业务日期计算）<br>
+                当天完成的订单计入0天<br>
+                反映外协厂的加工效率，周期越短效率越高
             </p>
         </div>
     </div>

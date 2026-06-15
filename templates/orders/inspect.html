@@ -1,25 +1,84 @@
 {% extends 'base.html' %}
-{% block title %}质检 - {{ order.order_no }}{% endblock %}
+{% block title %}质检登记{% if order %} - {{ order.order_no }}{% endif %}{% endblock %}
 {% block content %}
 <div class="page-header">
-    <h1>🔍 入厂质检</h1>
+    <h1>🔍 质检登记</h1>
     <div class="actions">
-        <a href="{{ url_for('view_order', order_id=order.id) }}" class="btn btn-secondary">← 返回详情</a>
+        {% if order %}
+        <a href="{{ url_for('view_order', order_id=order.id) }}" class="btn btn-secondary">← 返回订单</a>
+        {% endif %}
     </div>
 </div>
 
 <div class="detail-grid">
     <div>
+        {% if order %}
         <div class="card">
             <div class="card-header"><h2>📋 订单信息</h2></div>
             <div class="detail-section">
                 <div class="detail-row"><span class="label">订单号</span><span class="value font-bold">{{ order.order_no }}</span></div>
                 <div class="detail-row"><span class="label">外协厂</span><span class="value">{{ order.supplier.name }}</span></div>
                 <div class="detail-row"><span class="label">零件图号</span><span class="value">{{ order.drawing_no }}{% if order.part_name %} · {{ order.part_name }}{% endif %}</span></div>
-                <div class="detail-row"><span class="label">到货数量</span><span class="value font-bold text-large">{{ order.quantity }} 件</span></div>
+                <div class="detail-row"><span class="label">订单总数量</span><span class="value font-bold">{{ order.quantity }} 件</span></div>
+                <div class="detail-row"><span class="label">累计已收货</span><span class="value text-success">{{ order.get_total_received() }} 件</span></div>
+                <div class="detail-row"><span class="label">累计已检验</span><span class="value text-info">{{ order.get_total_inspected() }} 件</span></div>
+                <div class="detail-row"><span class="label">累计合格</span><span class="value text-success">{{ order.get_total_qualified() }} 件</span></div>
+                <div class="detail-row"><span class="label">累计不合格</span><span class="value text-danger">{{ order.get_total_unqualified() }} 件</span></div>
                 <div class="detail-row"><span class="label">加工单价</span><span class="value">¥{{ '%.2f'|format(order.unit_price) }}</span></div>
             </div>
         </div>
+        {% endif %}
+
+        {% if receipt %}
+        <div class="card" style="background:linear-gradient(135deg,#fff8e1,#ffe0b2)">
+            <div class="card-header"><h2>📦 本次收货单信息</h2></div>
+            <div class="detail-section">
+                <div class="detail-row"><span class="label">收货单号</span><span class="value font-bold">{{ receipt.receipt_no }}</span></div>
+                <div class="detail-row"><span class="label">收货数量</span><span class="value font-bold">{{ receipt.received_quantity }} 件</span></div>
+                <div class="detail-row"><span class="label">已质检数量</span><span class="value">{{ receipt.received_quantity - receipt.get_pending_inspection() }} 件</span></div>
+                <div class="detail-row"><span class="label">本次待检数量</span><span class="value font-bold text-danger">{{ pending }} 件</span></div>
+                <div class="detail-row"><span class="label">运单号</span><span class="value">{{ receipt.waybill_no or '-' }}</span></div>
+                <div class="detail-row"><span class="label">收货人</span><span class="value">{{ receipt.receiver or '-' }}</span></div>
+                <div class="detail-row"><span class="label">收货时间</span><span class="value">{{ receipt.created_at.strftime('%Y-%m-%d %H:%M') }}</span></div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if order and order.inspections %}
+        <div class="card">
+            <div class="card-header"><h2>📊 历史质检记录</h2></div>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>质检单号</th>
+                            <th>关联收货单</th>
+                            <th>合格数</th>
+                            <th>不合格数</th>
+                            <th>不合格原因</th>
+                            <th>本次应付</th>
+                            <th>质检员</th>
+                            <th>时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for insp in order.inspections %}
+                        <tr>
+                            <td class="font-bold">{{ insp.inspection_no }}</td>
+                            <td>{{ insp.receipt.receipt_no }}</td>
+                            <td class="text-success">{{ insp.qualified_quantity }}</td>
+                            <td class="{% if insp.unqualified_quantity > 0 %}text-danger font-bold{% endif %}">{{ insp.unqualified_quantity }}</td>
+                            <td class="text-small">{{ insp.defect_reasons or '-' }}</td>
+                            <td>¥{{ '%.2f'|format(insp.get_inspection_amount()) }}</td>
+                            <td>{{ insp.inspector }}</td>
+                            <td class="text-small">{{ insp.created_at.strftime('%m-%d %H:%M') }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="card">
             <div class="card-header"><h2>✅ 质检登记</h2></div>
@@ -27,15 +86,15 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label class="required">合格数量</label>
-                        <input type="number" name="qualified_quantity" id="qualified" class="form-control" min="0" max="{{ order.quantity }}" value="{{ order.quantity }}" required oninput="updateDiff()">
+                        <input type="number" name="qualified_quantity" id="qualified" class="form-control" min="0" max="{{ pending }}" value="{{ pending }}" required oninput="updateDiff()">
                     </div>
                     <div class="form-group">
                         <label class="required">不合格数量</label>
-                        <input type="number" name="unqualified_quantity" id="unqualified" class="form-control" min="0" max="{{ order.quantity }}" value="0" required oninput="updateDiff()">
+                        <input type="number" name="unqualified_quantity" id="unqualified" class="form-control" min="0" max="{{ pending }}" value="0" required oninput="updateDiff()">
                     </div>
                     <div class="form-group">
                         <label>合计校验</label>
-                        <div id="diff_check" class="form-control" style="background:#e8f5e9;color:#27ae60;font-weight:600">✓ 数量正确 (总计 {{ order.quantity }} 件)</div>
+                        <div id="diff_check" class="form-control" style="background:#e8f5e9;color:#27ae60;font-weight:600">✓ 数量正确 (总计 {{ pending }} 件)</div>
                     </div>
                 </div>
 
@@ -51,15 +110,29 @@
                     </div>
                 </div>
 
-                <div class="card" style="margin-top:15px;background:#f8f9fa;border:1px dashed #dee2e6">
-                    <div class="detail-row"><span class="label">应付加工费（预估）</span>
-                        <span id="payable_amt" class="value text-success text-large font-bold">¥{{ '%.2f'|format(order.quantity * order.unit_price) }}</span>
+                <div class="form-group">
+                    <label>备注</label>
+                    <textarea name="remark" class="form-control" placeholder="质检说明、返工要求等..."></textarea>
+                </div>
+
+                <div class="card" style="margin-top:15px;background:linear-gradient(135deg,#e8f5e9,#c8e6c9);border:1px solid #a5d6a7">
+                    <div class="detail-row" style="border:none">
+                        <span class="label" style="color:#2e7d32">本次应付金额</span>
+                        <span id="payable_amt" class="value" style="color:#1b5e20;font-size:22px;font-weight:700">¥{{ '%.2f'|format(pending * order.unit_price) }}</span>
                     </div>
+                    {% if order %}
+                    <div class="detail-row" style="border:none;padding-top:0">
+                        <span class="label" style="color:#2e7d32">累计应付金额</span>
+                        <span class="value" style="color:#1b5e20;font-weight:600">¥{{ '%.2f'|format((order.get_total_qualified() + pending) * order.unit_price) }}</span>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary" style="padding:10px 40px">✅ 提交质检结果</button>
+                    {% if order %}
                     <a href="{{ url_for('view_order', order_id=order.id) }}" class="btn btn-secondary">取消</a>
+                    {% endif %}
                 </div>
             </form>
         </div>
@@ -69,14 +142,14 @@
         <div class="card">
             <div class="card-header"><h2>💡 填写说明</h2></div>
             <div style="font-size:14px;line-height:2;color:#555">
-                <p>1. <strong>合格数量 + 不合格数量</strong> 必须等于订单数量 <strong>{{ order.quantity }}</strong> 件</p>
+                <p>1. <strong>合格数量 + 不合格数量</strong> 必须等于待检数量 <strong>{{ pending }}</strong> 件</p>
                 <p>2. 应付加工费 = <span class="text-success">合格数量</span> × 加工单价</p>
-                <p>3. 不合格品不计加工费，请如实填写</p>
+                <p>3. 不合格品不计加工费</p>
                 <p>4. 若存在不合格品，请勾选对应的不合格原因</p>
-                <p>5. 一次合格率用于外协厂绩效评估</p>
+                <p>5. 一张订单可分多次收货、多次质检，系统自动汇总</p>
                 <hr style="margin:15px 0;border:none;border-top:1px dashed #ddd">
                 <div class="text-small text-muted">
-                    <strong>常用不合格项说明：</strong><br>
+                    <strong>不合格项说明：</strong><br>
                     • 尺寸超差：零件尺寸超出图纸公差<br>
                     • 表面划伤：加工或运输过程中表面损伤<br>
                     • 变形：零件发生弯曲、扭曲等形变<br>
@@ -93,18 +166,22 @@ function updateDiff() {
     const q = parseInt(document.getElementById('qualified').value) || 0;
     const u = parseInt(document.getElementById('unqualified').value) || 0;
     const total = q + u;
-    const target = {{ order.quantity }};
+    const target = {{ pending }};
     const check = document.getElementById('diff_check');
+    {% if order %}
     const price = {{ order.unit_price }};
+    {% else %}
+    const price = 0;
+    {% endif %}
 
     if (total === target) {
         check.style.background = '#e8f5e9';
         check.style.color = '#27ae60';
-        check.textContent = '✓ 数量正确 (总计 ' + total + ' 件)';
+        check.textContent = '✓ 数量正确 (合计 ' + total + ' 件)';
     } else {
         check.style.background = '#fde8e8';
         check.style.color = '#c0392b';
-        check.textContent = '✗ 数量不符：当前合计 ' + total + ' 件，应等于 ' + target + ' 件（差 ' + (target - total) + ' 件）';
+        check.textContent = '✗ 数量不符：合计 ' + total + ' 件，应等于 ' + target + ' 件（差 ' + (target - total) + ' 件）';
     }
     document.getElementById('payable_amt').textContent = '¥' + (q * price).toFixed(2);
 }

@@ -260,8 +260,10 @@ a:hover { text-decoration: underline; }
 .badge-accepted { background: #fff3e0; color: #ef6c00; }
 .badge-production { background: #f3e5f5; color: #7b1fa2; }
 .badge-shipped { background: #e8eaf6; color: #283593; }
+.badge-partial-arrived { background: #fce4ec; color: #c2185b; }
 .badge-arrived { background: #e0f7fa; color: #00695c; }
-.badge-inspected { background: #fff8e1; color: #f57f17; }
+.badge-inspecting { background: #fff8e1; color: #f57f17; }
+.badge-inspected { background: #f1f8e9; color: #558b2f; }
 .badge-completed { background: #e8f5e9; color: #2e7d32; }
 
 .badge-pending { background: #fff3e0; color: #e65100; }
@@ -486,6 +488,46 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .space-between { justify-content: space-between; }
 .align-center { align-items: center; }
 .flex-wrap { flex-wrap: wrap; }
+
+/* 结算看板 */
+.stat-card {
+    color: white !important;
+    border: none;
+    position: relative;
+    overflow: hidden;
+}
+.stat-card .stat-label {
+    color: rgba(255,255,255,0.9) !important;
+}
+.stat-card .stat-value {
+    color: white !important;
+}
+.stat-card .stat-icon {
+    opacity: 0.4 !important;
+    color: white;
+}
+
+.card-subheader {
+    padding: 12px 0 8px 0;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #e9ecef;
+}
+.card-subheader h3 {
+    font-size: 15px;
+    color: #495057;
+    font-weight: 600;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+}
+.empty-state p {
+    font-size: 15px;
+}
+
+.text-primary { color: #3498db; }
 
 @media (max-width: 768px) {
     .detail-grid { grid-template-columns: 1fr; }

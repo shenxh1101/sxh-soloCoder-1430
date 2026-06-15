@@ -3,9 +3,10 @@
 {% block content %}
 <div class="page-header">
     <h1>📋 订单管理</h1>
-    <div class="actions">
+    <div class="actions flex gap-10">
         {% if current_user.role == 'enterprise' %}
         <a href="{{ url_for('create_order') }}" class="btn btn-primary">➕ 创建委外订单</a>
+        <a href="{{ url_for('export_unsettled_orders', supplier_id=supplier_filter, status=status_filter, start_date=start_date, end_date=end_date) }}" class="btn btn-secondary">📥 导出未结订单</a>
         {% endif %}
     </div>
 </div>
@@ -33,6 +34,14 @@
             </select>
         </div>
         <div class="form-group">
+            <label>下单日期起</label>
+            <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+        </div>
+        <div class="form-group">
+            <label>下单日期止</label>
+            <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+        </div>
+        <div class="form-group">
             <button type="submit" class="btn btn-primary">🔍 筛选</button>
             <a href="{{ url_for('list_orders') }}" class="btn btn-secondary">重置</a>
         </div>
@@ -40,6 +49,9 @@
 </div>
 
 <div class="card">
+    <div class="flex space-between align-center mb-10">
+        <div class="text-small text-muted">共 {{ orders|length }} 条订单记录</div>
+    </div>
     <div class="table-wrapper">
         <table class="data-table">
             <thead>
@@ -47,13 +59,14 @@
                     <th>订单号</th>
                     {% if current_user.role == 'enterprise' %}<th>外协厂</th>{% endif %}
                     <th>零件图号</th>
-                    <th>零件名称</th>
                     <th>数量</th>
-                    <th>单价</th>
+                    <th>已收</th>
+                    <th>已检</th>
+                    <th>合格</th>
                     <th>金额</th>
+                    <th>应付</th>
                     <th>约定交货</th>
                     <th>状态</th>
-                    <th>下单时间</th>
                     <th>操作</th>
                 </tr>
             </thead>
@@ -62,33 +75,51 @@
                 <tr>
                     <td class="font-bold">{{ o.order_no }}</td>
                     {% if current_user.role == 'enterprise' %}<td>{{ o.supplier.name }}</td>{% endif %}
-                    <td>{{ o.drawing_no }}</td>
-                    <td>{{ o.part_name or '-' }}</td>
+                    <td>{{ o.drawing_no }}{% if o.part_name %}<br><span class="text-muted text-small">{{ o.part_name }}</span>{% endif %}</td>
                     <td>{{ o.quantity }}</td>
-                    <td>¥{{ '%.2f'|format(o.unit_price) }}</td>
-                    <td>¥{{ '%.2f'|format(o.get_total_amount()) }}</td>
                     <td>
-                        {% set is_overdue = o.agreed_delivery_date < o.agreed_delivery_date.today() and o.status not in ['质检完成', '已完成'] %}
-                        <span class="{% if is_overdue %}text-danger font-bold{% endif %}">{{ o.agreed_delivery_date.strftime('%Y-%m-%d') }}</span>
-                        {% if is_overdue %}<span class="badge" style="background:#fde8e8;color:#c0392b;margin-left:5px">逾期</span>{% endif %}
+                        <span class="{% if o.get_total_received() == o.quantity %}text-success{% elif o.get_total_received() > 0 %}text-info{% endif %}">
+                            {{ o.get_total_received() }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="{% if o.get_total_inspected() == o.quantity %}text-success{% endif %}">
+                            {{ o.get_total_inspected() }}
+                        </span>
+                    </td>
+                    <td class="{% if o.get_total_qualified() > 0 %}text-success{% endif %}">
+                        {{ o.get_total_qualified() }}
+                    </td>
+                    <td>¥{{ '%.0f'|format(o.get_total_amount()) }}</td>
+                    <td class="font-bold {% if o.get_payable_amount() > 0 %}text-success{% endif %}">
+                        ¥{{ '%.0f'|format(o.get_payable_amount()) }}
+                    </td>
+                    <td>
+                        {% set is_overdue = o.agreed_delivery_date < date.today() and o.status not in ['质检完成', '已完成'] %}
+                        <span class="{% if is_overdue %}text-danger font-bold{% endif %}">{{ o.agreed_delivery_date.strftime('%m-%d') }}</span>
+                        {% if is_overdue %}<span class="badge" style="background:#fde8e8;color:#c0392b;margin-left:4px;font-size:11px">逾期</span>{% endif %}
+                        {% if o.status in ['质检完成', '已完成'] and o.is_on_time() is sameas false %}
+                        <span class="badge" style="background:#fde8e8;color:#c0392b;margin-left:4px;font-size:11px">逾期交付</span>
+                        {% endif %}
                     </td>
                     <td>
                         {% set badge_class = {
                             '已下单':'badge-ordered', '已接单':'badge-accepted',
                             '生产中':'badge-production', '已发货':'badge-shipped',
-                            '已到货':'badge-arrived', '质检完成':'badge-inspected', '已完成':'badge-completed'
+                            '部分到货':'badge-partial-arrived', '已到货':'badge-arrived',
+                            '质检中':'badge-inspecting', '质检完成':'badge-inspected',
+                            '已完成':'badge-completed'
                         } %}
                         <span class="badge {{ badge_class.get(o.status, '') }}">{{ o.status }}</span>
                     </td>
-                    <td class="text-small">{{ o.created_at.strftime('%Y-%m-%d') }}</td>
                     <td>
                         <div class="actions-col">
                             <a href="{{ url_for('view_order', order_id=o.id) }}" class="btn btn-outline btn-sm">查看</a>
                             {% if current_user.role == 'enterprise' and o.status == '已下单' %}
                             <a href="{{ url_for('edit_order', order_id=o.id) }}" class="btn btn-warning btn-sm">编辑</a>
                             {% endif %}
-                            {% if current_user.role == 'enterprise' and o.status == '已到货' %}
-                            <a href="{{ url_for('inspect_order', order_id=o.id) }}" class="btn btn-info btn-sm">质检</a>
+                            {% if current_user.role == 'enterprise' and o.can_create_receipt() %}
+                            <a href="{{ url_for('create_receipt', order_id=o.id) }}" class="btn btn-success btn-sm">收货</a>
                             {% endif %}
                             {% if current_user.role == 'supplier' and o.status == '已下单' %}
                             <form method="post" action="{{ url_for('update_order_status', order_id=o.id) }}" style="display:inline">
@@ -98,17 +129,12 @@
                             {% elif current_user.role == 'supplier' and o.status == '已接单' %}
                             <form method="post" action="{{ url_for('update_order_status', order_id=o.id) }}" style="display:inline">
                                 <input type="hidden" name="status" value="生产中">
-                                <button type="submit" class="btn btn-primary btn-sm">开始生产</button>
+                                <button type="submit" class="btn btn-primary btn-sm">生产</button>
                             </form>
                             {% elif current_user.role == 'supplier' and o.status == '生产中' %}
                             <form method="post" action="{{ url_for('update_order_status', order_id=o.id) }}" style="display:inline">
                                 <input type="hidden" name="status" value="已发货">
                                 <button type="submit" class="btn btn-warning btn-sm">发货</button>
-                            </form>
-                            {% elif current_user.role == 'enterprise' and o.status == '已发货' %}
-                            <form method="post" action="{{ url_for('update_order_status', order_id=o.id) }}" style="display:inline">
-                                <input type="hidden" name="status" value="已到货">
-                                <button type="submit" class="btn btn-info btn-sm">确认到货</button>
                             </form>
                             {% endif %}
                         </div>
@@ -116,7 +142,7 @@
                 </tr>
             {% endfor %}
             {% if not orders %}
-                <tr><td colspan="11" class="text-center text-muted">暂无订单数据</td></tr>
+                <tr><td colspan="12" class="text-center text-muted">暂无订单数据</td></tr>
             {% endif %}
             </tbody>
         </table>

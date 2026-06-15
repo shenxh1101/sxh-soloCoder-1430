@@ -1,0 +1,218 @@
+{% extends 'base.html' %}
+{% block title %}结算看板 - 外协订单管理系统{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>💰 结算看板</h1>
+    <div class="actions">
+        <a href="{{ url_for('export_payables') }}" class="btn btn-success">📊 导出应付款明细</a>
+    </div>
+</div>
+
+<div class="filter-bar">
+    <form method="get" class="flex gap-10 flex-wrap align-center" style="width:100%">
+        <div class="form-group">
+            <label>外协厂筛选</label>
+            <select name="supplier_id" class="form-control" onchange="this.form.submit()">
+                <option value="">全部外协厂</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}" {% if supplier_filter == s.id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)">
+        <div class="stat-icon">📋</div>
+        <div class="stat-content">
+            <div class="stat-label">待申请金额</div>
+            <div class="stat-value">¥{{ '%.2f'|format(totals.pending_apply) }}</div>
+        </div>
+    </div>
+    <div class="stat-card" style="background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%)">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-content">
+            <div class="stat-label">待审批金额</div>
+            <div class="stat-value">¥{{ '%.2f'|format(totals.pending_approve) }}</div>
+        </div>
+    </div>
+    <div class="stat-card" style="background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)">
+        <div class="stat-icon">💳</div>
+        <div class="stat-content">
+            <div class="stat-label">待付款金额</div>
+            <div class="stat-value">¥{{ '%.2f'|format(totals.pending_pay) }}</div>
+        </div>
+    </div>
+    <div class="stat-card" style="background:linear-gradient(135deg,#43e97b 0%,#38f9d7 100%)">
+        <div class="stat-icon">📊</div>
+        <div class="stat-content">
+            <div class="stat-label">未结总金额</div>
+            <div class="stat-value">¥{{ '%.2f'|format(totals.unsettled) }}</div>
+        </div>
+    </div>
+</div>
+
+{% for data in settlement_data %}
+{% set s = data.supplier %}
+<div class="card">
+    <div class="card-header">
+        <h2>🏢 {{ s.name }}</h2>
+        <div class="flex gap-10">
+            <span class="badge" style="background:#667eea">待申请 ¥{{ '%.2f'|format(data.pending_apply) }}</span>
+            <span class="badge" style="background:#f5576c">待审批 ¥{{ '%.2f'|format(data.pending_approve) }}</span>
+            <span class="badge" style="background:#4facfe">待付款 ¥{{ '%.2f'|format(data.pending_pay) }}</span>
+            <span class="badge badge-completed">未结 ¥{{ '%.2f'|format(data.unsettled) }}</span>
+        </div>
+    </div>
+
+    {% if data.orders_to_apply %}
+    <div class="card-subheader">
+        <h3>📋 待申请付款订单 ({{ data.orders_to_apply|length }} 单)</h3>
+    </div>
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>订单号</th>
+                    <th>零件图号</th>
+                    <th>零件名称</th>
+                    <th>订单数量</th>
+                    <th>合格数量</th>
+                    <th>不合格数量</th>
+                    <th>应付金额</th>
+                    <th>质检完成时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for o in data.orders_to_apply %}
+                <tr>
+                    <td class="font-bold">{{ o.order_no }}</td>
+                    <td>{{ o.drawing_no }}</td>
+                    <td>{{ o.part_name or '-' }}</td>
+                    <td>{{ o.quantity }}</td>
+                    <td class="text-success">{{ o.get_total_qualified() }}</td>
+                    <td class="text-warning">{{ o.get_total_unqualified() }}</td>
+                    <td class="font-bold text-success">¥{{ '%.2f'|format(o.get_payable_amount()) }}</td>
+                    <td>{{ o.last_inspected_at.strftime('%Y-%m-%d %H:%M') if o.last_inspected_at else '-' }}</td>
+                    <td>
+                        <a href="{{ url_for('create_payment', order_id=o.id) }}" class="btn btn-primary btn-sm">申请付款</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if data.pending_payments %}
+    <div class="card-subheader">
+        <h3>⏳ 待审批付款申请 ({{ data.pending_payments|length }} 单)</h3>
+    </div>
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>申请单号</th>
+                    <th>关联订单</th>
+                    <th>申请金额</th>
+                    <th>申请人</th>
+                    <th>申请时间</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pr in data.pending_payments %}
+                <tr>
+                    <td class="font-bold">{{ pr.request_no }}</td>
+                    <td>{{ pr.order.order_no }}</td>
+                    <td class="font-bold text-warning">¥{{ '%.2f'|format(pr.amount) }}</td>
+                    <td>{{ pr.applicant or '-' }}</td>
+                    <td>{{ pr.created_at.strftime('%Y-%m-%d %H:%M') if pr.created_at else '-' }}</td>
+                    <td><span class="badge badge-pending">{{ pr.status }}</span></td>
+                    <td>
+                        <a href="{{ url_for('view_payment', payment_id=pr.id) }}" class="btn btn-secondary btn-sm">查看</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if data.approved_payments %}
+    <div class="card-subheader">
+        <h3>💳 待付款 ({{ data.approved_payments|length }} 单)</h3>
+    </div>
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>申请单号</th>
+                    <th>关联订单</th>
+                    <th>申请金额</th>
+                    <th>审批人</th>
+                    <th>审批时间</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pr in data.approved_payments %}
+                <tr>
+                    <td class="font-bold">{{ pr.request_no }}</td>
+                    <td>{{ pr.order.order_no }}</td>
+                    <td class="font-bold text-primary">¥{{ '%.2f'|format(pr.amount) }}</td>
+                    <td>{{ pr.approver or '-' }}</td>
+                    <td>{{ pr.approved_at.strftime('%Y-%m-%d %H:%M') if pr.approved_at else '-' }}</td>
+                    <td><span class="badge badge-approved">{{ pr.status }}</span></td>
+                    <td>
+                        <a href="{{ url_for('view_payment', payment_id=pr.id) }}" class="btn btn-secondary btn-sm">查看</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if not data.orders_to_apply and not data.pending_payments and not data.approved_payments %}
+    <div class="empty-state">
+        <p>✅ 该外协厂当前无待处理结算项</p>
+    </div>
+    {% endif %}
+</div>
+{% endfor %}
+
+<div class="card">
+    <div class="card-header"><h2>💡 结算状态说明</h2></div>
+    <div class="form-row">
+        <div>
+            <h4 style="margin-bottom:10px;color:#667eea">📋 待申请</h4>
+            <p class="text-small" style="color:#555;line-height:1.8">
+                质检已完成但尚未创建付款申请的订单<br>
+                应付金额 = 合格数量 × 加工单价<br>
+                需要财务人员发起付款申请
+            </p>
+        </div>
+        <div>
+            <h4 style="margin-bottom:10px;color:#f5576c">⏳ 待审批</h4>
+            <p class="text-small" style="color:#555;line-height:1.8">
+                付款申请已创建但尚未审批<br>
+                由相关负责人进行审批操作<br>
+                审批通过后进入待付款状态
+            </p>
+        </div>
+        <div>
+            <h4 style="margin-bottom:10px;color:#4facfe">💳 待付款</h4>
+            <p class="text-small" style="color:#555;line-height:1.8">
+                付款申请已审批通过等待付款<br>
+                付款完成后订单自动标记为"已完成"<br>
+                付款状态与订单状态自动联动
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

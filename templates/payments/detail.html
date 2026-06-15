@@ -88,7 +88,10 @@
             <hr style="border:none;border-top:1px dashed #64b5f6;margin:10px 0">
             <div class="text-small" style="color:#1565c0;line-height:1.8">
                 订单数量：{{ payment.order.quantity }} 件<br>
-                合格数量：{{ payment.order.inspections.qualified_quantity if payment.order.inspections else 0 }} 件<br>
+                已收货：{{ payment.order.get_total_received() }} 件<br>
+                已检验：{{ payment.order.get_total_inspected() }} 件<br>
+                合格数量：{{ payment.order.get_total_qualified() }} 件<br>
+                不合格数量：{{ payment.order.get_total_unqualified() }} 件<br>
                 加工单价：¥{{ '%.2f'|format(payment.order.unit_price) }}<br>
                 计算公式：合格数量 × 单价
             </div>

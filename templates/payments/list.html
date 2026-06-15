@@ -11,6 +11,15 @@
 <div class="filter-bar">
     <form method="get" class="flex gap-10 flex-wrap align-center" style="width:100%">
         <div class="form-group">
+            <label>外协厂</label>
+            <select name="supplier_id" class="form-control">
+                <option value="">全部外协厂</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}" {% if supplier_filter == s.id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
             <label>申请状态</label>
             <select name="status" class="form-control">
                 <option value="">全部状态</option>

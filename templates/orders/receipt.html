@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% block title %}收货登记 - {{ order.order_no }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>📦 收货登记</h1>
+    <div class="actions">
+        <a href="{{ url_for('view_order', order_id=order.id) }}" class="btn btn-secondary">← 返回订单</a>
+    </div>
+</div>
+
+<div class="detail-grid">
+    <div>
+        <div class="card">
+            <div class="card-header"><h2>📝 订单信息</h2></div>
+            <div class="detail-section">
+                <div class="detail-row"><span class="label">订单号</span><span class="value font-bold">{{ order.order_no }}</span></div>
+                <div class="detail-row"><span class="label">外协厂</span><span class="value">{{ order.supplier.name }}</span></div>
+                <div class="detail-row"><span class="label">零件图号</span><span class="value">{{ order.drawing_no }}{% if order.part_name %} · {{ order.part_name }}{% endif %}</span></div>
+                <div class="detail-row"><span class="label">订单总数量</span><span class="value font-bold">{{ order.quantity }} 件</span></div>
+                <div class="detail-row"><span class="label">已收货数量</span><span class="value text-success">{{ order.get_total_received() }} 件</span></div>
+                <div class="detail-row"><span class="label">待收货数量</span><span class="value font-bold text-danger">{{ order.get_remaining_quantity() }} 件</span></div>
+                <div class="detail-row"><span class="label">当前状态</span>
+                    <span class="value">
+                        {% set bc = {'已发货':'badge-shipped', '部分到货':'badge-production'} %}
+                        <span class="badge {{ bc.get(order.status, '') }}">{{ order.status }}</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        {% if order.receipts %}
+        <div class="card">
+            <div class="card-header"><h2>📋 历史收货记录</h2></div>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>收货单号</th>
+                            <th>数量</th>
+                            <th>运单号</th>
+                            <th>收货人</th>
+                            <th>收货时间</th>
+                            <th>已质检</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for r in order.receipts %}
+                        <tr>
+                            <td class="font-bold">{{ r.receipt_no }}</td>
+                            <td>{{ r.received_quantity }} 件</td>
+                            <td>{{ r.waybill_no or '-' }}</td>
+                            <td>{{ r.receiver or '-' }}</td>
+                            <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>
+                                {% set pending = r.get_pending_inspection() %}
+                                {% if pending == 0 %}
+                                <span class="badge badge-completed">已完成</span>
+                                {% else %}
+                                <span class="badge badge-pending">待检 {{ pending }} 件</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header"><h2>✅ 新增收货</h2></div>
+            <form method="post">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="required">本次收货数量</label>
+                        <input type="number" name="received_quantity" class="form-control" min="1" max="{{ order.get_remaining_quantity() }}" value="{{ order.get_remaining_quantity() }}" required oninput="checkQty()">
+                        <div class="text-small text-muted mt-10">可收货范围：1 - {{ order.get_remaining_quantity() }} 件</div>
+                        <div id="qty_warning" class="text-small text-danger mt-10" style="display:none"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>运单号</label>
+                        <input type="text" name="waybill_no" class="form-control" placeholder="物流单号/送货单号">
+                    </div>
+                    <div class="form-group">
+                        <label>收货人</label>
+                        <input type="text" name="receiver" class="form-control" value="{{ current_user.username }}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <textarea name="remark" class="form-control" placeholder="包装情况、异常说明等..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-success" style="padding:10px 40px">📦 确认收货</button>
+                    <a href="{{ url_for('view_order', order_id=order.id) }}" class="btn btn-secondary">取消</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-header"><h2>💡 操作说明</h2></div>
+            <div style="font-size:14px;line-height:2;color:#555">
+                <p>1. <strong>分批收货</strong>：支持一张订单分多次收货</p>
+                <p>2. <strong>状态自动更新</strong>：</p>
+                <p style="margin-left:20px">• 首次收货后状态变为"部分到货"</p>
+                <p style="margin-left:20px">• 收齐全部数量后状态变为"已到货"</p>
+                <p>3. <strong>收货后质检</strong>：每次收货后可单独发起质检</p>
+                <p>4. <strong>应付加工费</strong>：按累计合格数量 × 单价计算</p>
+                <hr style="margin:15px 0;border:none;border-top:1px dashed #ddd">
+                <div class="text-small text-muted">
+                    <strong>收货进度</strong><br>
+                    <div class="rate-bar mt-10">
+                        {% set ratio = order.get_total_received() / order.quantity * 100 %}
+                        <div class="rate-fill rate-good" style="width:{{ ratio }}%"></div>
+                    </div>
+                    <div class="text-small mt-10">已收货 {{ order.get_total_received() }} / {{ order.quantity }} 件 ({{ '%.1f'|format(ratio) }}%)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function checkQty() {
+    const qty = parseInt(document.querySelector('input[name="received_quantity"]').value) || 0;
+    const max = {{ order.get_remaining_quantity() }};
+    const warning = document.getElementById('qty_warning');
+    if (qty > max) {
+        warning.textContent = '⚠️ 收货数量不能超过待收货数量 ' + max + ' 件';
+        warning.style.display = 'block';
+    } else if (qty <= 0) {
+        warning.textContent = '⚠️ 收货数量必须大于0';
+        warning.style.display = 'block';
+    } else {
+        warning.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}
