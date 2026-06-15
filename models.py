@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -85,14 +85,14 @@ class Supplier(db.Model):
 
     def get_monthly_performance(self, months=6):
         from collections import OrderedDict
+        from dateutil.relativedelta import relativedelta
         result = OrderedDict()
         today = date.today()
         for i in range(months - 1, -1, -1):
-            month_start = date(today.year, today.month - i, 1)
-            if today.month - i <= 0:
-                month_start = date(today.year - 1, 12 + (today.month - i), 1)
-            next_month = month_start.replace(day=28) + __import__('datetime').timedelta(days=4)
-            month_end = next_month - __import__('datetime').timedelta(days=next_month.day)
+            month_date = today - relativedelta(months=i)
+            month_start = date(month_date.year, month_date.month, 1)
+            next_month_date = month_date + relativedelta(months=1)
+            month_end = date(next_month_date.year, next_month_date.month, 1) - timedelta(days=1)
 
             month_key = month_start.strftime('%Y-%m')
             orders_query = Order.query.filter(
@@ -108,6 +108,17 @@ class Supplier(db.Model):
             inspected = sum(1 for o in completed if o.inspections)
             total_cycle = sum(o.get_processing_days() for o in completed)
 
+            defect_list = []
+            for o in completed:
+                for insp in o.inspections:
+                    if insp.unqualified_quantity > 0 and insp.defect_reasons:
+                        defect_list.append({
+                            'order_no': o.order_no,
+                            'reasons': insp.defect_reasons,
+                            'qty': insp.unqualified_quantity,
+                            'detail': insp.defect_detail or ''
+                        })
+
             result[month_key] = {
                 'completed': total_completed,
                 'on_time': on_time,
@@ -116,7 +127,47 @@ class Supplier(db.Model):
                 'inspected': inspected,
                 'first_pass_rate': (first_pass / inspected * 100) if inspected > 0 else 0,
                 'avg_cycle': (total_cycle / total_completed) if total_completed > 0 else 0,
-                'total_value': sum(o.get_payable_amount() for o in completed)
+                'total_value': sum(o.get_payable_amount() for o in completed),
+                'defects': defect_list
+            }
+        return result
+
+    def get_monthly_payment_summary(self, months=6):
+        from collections import OrderedDict
+        from dateutil.relativedelta import relativedelta
+        result = OrderedDict()
+        today = date.today()
+        for i in range(months - 1, -1, -1):
+            month_date = today - relativedelta(months=i)
+            month_start = date(month_date.year, month_date.month, 1)
+            next_month_date = month_date + relativedelta(months=1)
+            month_end = date(next_month_date.year, next_month_date.month, 1) - timedelta(days=1)
+
+            month_key = month_start.strftime('%Y-%m')
+
+            orders = Order.query.filter(
+                Order.supplier_id == self.id,
+                Order.status.in_(['质检完成', '已完成'])
+            ).all()
+
+            paid = 0
+            unpaid = 0
+            overdue_unpaid = 0
+            for o in orders:
+                if o.last_inspected_at and o.last_inspected_at.date() >= month_start and o.last_inspected_at.date() <= month_end:
+                    amt = o.get_payable_amount()
+                    pr = o.payment_requests
+                    if pr and pr[0].status == '已付款' and pr[0].paid_at and pr[0].paid_at.date() >= month_start and pr[0].paid_at.date() <= month_end:
+                        paid += amt
+                    else:
+                        unpaid += amt
+                        if o.agreed_delivery_date + timedelta(days=30) < today:
+                            overdue_unpaid += amt
+
+            result[month_key] = {
+                'paid': paid,
+                'unpaid': unpaid,
+                'overdue_unpaid': overdue_unpaid
             }
         return result
 
@@ -230,6 +281,28 @@ class Order(db.Model):
                 self.first_inspected_at = now
             self.last_inspected_at = now
 
+    def is_overdue_for_payment(self):
+        if self.status == '质检完成' and self.last_inspected_at:
+            return (date.today() - self.last_inspected_at.date()).days > 30
+        return False
+
+    def get_defect_summary(self):
+        summary = []
+        for insp in self.inspections:
+            if insp.unqualified_quantity > 0:
+                parts = [insp.defect_reasons] if insp.defect_reasons else []
+                if insp.defect_detail:
+                    parts.append(insp.defect_detail)
+                summary.append({
+                    'inspection_no': insp.inspection_no,
+                    'receipt_no': insp.receipt.receipt_no if insp.receipt else '',
+                    'unqualified': insp.unqualified_quantity,
+                    'reasons': insp.defect_reasons or '',
+                    'detail': insp.defect_detail or '',
+                    'full_text': '；'.join(p for p in parts if p)
+                })
+        return summary
+
 
 class Receipt(db.Model):
     __tablename__ = 'receipts'
@@ -261,6 +334,7 @@ class Inspection(db.Model):
     qualified_quantity = db.Column(db.Integer, nullable=False, default=0)
     unqualified_quantity = db.Column(db.Integer, nullable=False, default=0)
     defect_reasons = db.Column(db.String(512))
+    defect_detail = db.Column(db.String(512))
     inspector = db.Column(db.String(80))
     remark = db.Column(db.String(512))
     created_at = db.Column(db.DateTime, default=datetime.now)

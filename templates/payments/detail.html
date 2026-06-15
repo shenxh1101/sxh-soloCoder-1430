@@ -96,6 +96,34 @@
                 计算公式：合格数量 × 单价
             </div>
         </div>
+
+        {% if payment.order.get_defect_summary() %}
+        <div class="card" style="border-left:4px solid #e74c3c;margin-top:15px">
+            <div class="card-header" style="padding-bottom:10px;margin-bottom:10px"><h3 style="font-size:14px;color:#e74c3c">⚠️ 不合格品记录</h3></div>
+            <div class="table-wrapper">
+                <table class="data-table text-small">
+                    <thead>
+                        <tr>
+                            <th>质检单号</th>
+                            <th>不合格数</th>
+                            <th>不合格原因</th>
+                            <th>补充说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in payment.order.get_defect_summary() %}
+                        <tr>
+                            <td class="font-bold">{{ d.inspection_no }}</td>
+                            <td class="text-danger">{{ d.unqualified }} 件</td>
+                            <td class="text-danger">{{ d.reasons }}</td>
+                            <td class="text-muted">{{ d.detail or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

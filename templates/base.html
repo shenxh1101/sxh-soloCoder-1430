@@ -20,6 +20,7 @@
         <li><a href="{{ url_for('list_suppliers') }}" class="{% if 'suppliers' in request.endpoint %}active{% endif %}">🏢 外协厂管理</a></li>
         <li><a href="{{ url_for('list_payments') }}" class="{% if 'payments' in request.endpoint %}active{% endif %}">💰 付款管理</a></li>
         <li><a href="{{ url_for('settlement_dashboard') }}" class="{% if 'settlement' in request.endpoint %}active{% endif %}">💹 结算看板</a></li>
+        <li><a href="{{ url_for('payment_analysis') }}" class="{% if 'payment_analysis' in request.endpoint %}active{% endif %}">💳 月度分析</a></li>
         <li><a href="{{ url_for('performance_report') }}" class="{% if 'performance' in request.endpoint %}active{% endif %}">📈 绩效报告</a></li>
         {% endif %}
     </ul>

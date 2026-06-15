@@ -97,6 +97,9 @@
                     <td class="font-bold text-success">¥{{ '%.2f'|format(o.get_payable_amount()) }}</td>
                     <td>{{ o.last_inspected_at.strftime('%Y-%m-%d %H:%M') if o.last_inspected_at else '-' }}</td>
                     <td>
+                        {% if o.is_overdue_for_payment() %}
+                        <span class="badge" style="background:#fde8e8;color:#c0392b">⚠️ 逾期</span>
+                        {% endif %}
                         <a href="{{ url_for('create_payment', order_id=o.id) }}" class="btn btn-primary btn-sm">申请付款</a>
                     </td>
                 </tr>

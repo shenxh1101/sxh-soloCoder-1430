@@ -3,6 +3,7 @@ from datetime import datetime, date, timedelta
 from functools import wraps
 from io import BytesIO
 from collections import OrderedDict
+from dateutil.relativedelta import relativedelta
 
 from flask import (Flask, render_template, request, redirect, url_for,
                    flash, jsonify, send_file, abort)
@@ -342,16 +343,15 @@ def create_app():
         new_status = request.form['status']
         now = datetime.now()
         valid_transitions = {
-            'enterprise': {'已发货': '已到货', '质检完成': '已完成', '部分到货': '已到货'},
+            'enterprise': {'已发货': '已到货', '部分到货': '已到货'},
             'supplier': {'已下单': '已接单', '已接单': '生产中', '生产中': '已发货'}
         }
         if current_user.role == 'supplier' and order.supplier_id != current_user.supplier_id:
             abort(403)
         allowed = valid_transitions.get(current_user.role, {})
         if order.status not in allowed or allowed[order.status] != new_status:
-            if not (current_user.role == 'enterprise' and new_status in ['已到货', '已完成']):
-                flash('非法的状态转换', 'danger')
-                return redirect(url_for('view_order', order_id=order.id))
+            flash('非法的状态转换', 'danger')
+            return redirect(url_for('view_order', order_id=order.id))
         order.status = new_status
         if new_status == '已接单':
             order.accepted_at = now
@@ -361,8 +361,6 @@ def create_app():
             order.shipped_at = now
         elif new_status == '已到货':
             order.last_arrived_at = now
-        elif new_status == '已完成':
-            order.completed_at = now
         db.session.commit()
         flash(f'订单状态已更新为: {new_status}', 'success')
         return redirect(url_for('view_order', order_id=order.id))
@@ -459,6 +457,10 @@ def create_app():
                 flash('数量不能为负数', 'danger')
                 return redirect(url_for('inspect_receipt', receipt_id=receipt.id))
             defect_reasons = request.form.getlist('defect_reasons')
+            defect_detail = request.form.get('defect_detail', '').strip()
+            if unqualified > 0 and not defect_reasons:
+                flash('不合格数量大于0时，必须勾选不合格原因', 'danger')
+                return redirect(url_for('inspect_receipt', receipt_id=receipt.id))
             inspection = Inspection(
                 inspection_no=generate_inspection_no(),
                 order_id=order.id,
@@ -466,6 +468,7 @@ def create_app():
                 qualified_quantity=qualified,
                 unqualified_quantity=unqualified,
                 defect_reasons=','.join(defect_reasons) if defect_reasons else '',
+                defect_detail=defect_detail,
                 inspector=current_user.username,
                 remark=request.form.get('remark', '')
             )
@@ -617,19 +620,16 @@ def create_app():
                 'first_pass_rate': first_pass_rate,
                 'avg_cycle': avg_cycle,
                 'total_value': total_value,
-                'monthly_trend': s.get_monthly_performance(6)
+                'monthly_trend': s.get_monthly_performance(6),
+                'cycle_max': max([avg_cycle, 20] + [m.get('avg_cycle', 0) for m in s.get_monthly_performance(6).values() if m.get('completed', 0) > 0])
             })
 
         all_suppliers = Supplier.query.all()
         month_labels = []
         today = date.today()
         for i in range(5, -1, -1):
-            m = today.month - i
-            y = today.year
-            if m <= 0:
-                m += 12
-                y -= 1
-            month_labels.append(f'{y}-{m:02d}')
+            m_date = today - relativedelta(months=i)
+            month_labels.append(f'{m_date.year}-{m_date.month:02d}')
 
         return render_template('reports/performance.html',
                                report_data=report_data,
@@ -810,6 +810,101 @@ def create_app():
         wb.save(output)
         output.seek(0)
         filename = f'应付款明细_{date.today().strftime("%Y%m%d")}.xlsx'
+        return send_file(output, as_attachment=True, download_name=filename,
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    # ======== 月度付款分析 ========
+
+    @app.route('/reports/payment-analysis')
+    @login_required
+    @role_required('enterprise')
+    def payment_analysis():
+        supplier_filter = request.args.get('supplier_id', type=int)
+        suppliers = Supplier.query.all()
+        analysis_data = []
+        month_labels = []
+        today = date.today()
+        for i in range(5, -1, -1):
+            m_date = today - relativedelta(months=i)
+            month_labels.append(f'{m_date.year}-{m_date.month:02d}')
+
+        for s in suppliers:
+            if supplier_filter and s.id != supplier_filter:
+                continue
+            monthly = s.get_monthly_payment_summary(6)
+            total_paid = sum(m['paid'] for m in monthly.values())
+            total_unpaid = sum(m['unpaid'] for m in monthly.values())
+            total_overdue = sum(m['overdue_unpaid'] for m in monthly.values())
+            amt_max = max([10000, total_paid + total_unpaid] + [m['paid'] + m['unpaid'] for m in monthly.values()])
+            analysis_data.append({
+                'supplier': s,
+                'monthly': monthly,
+                'total_paid': total_paid,
+                'total_unpaid': total_unpaid,
+                'total_overdue': total_overdue,
+                'amt_max': amt_max
+            })
+
+        totals = {
+            'paid': sum(d['total_paid'] for d in analysis_data),
+            'unpaid': sum(d['total_unpaid'] for d in analysis_data),
+            'overdue': sum(d['total_overdue'] for d in analysis_data)
+        }
+        return render_template('reports/payment_analysis.html',
+                               analysis_data=analysis_data,
+                               suppliers=suppliers,
+                               supplier_filter=supplier_filter,
+                               month_labels=month_labels,
+                               totals=totals)
+
+    @app.route('/export/payment-monthly')
+    @login_required
+    @role_required('enterprise')
+    def export_payment_monthly():
+        supplier_filter = request.args.get('supplier_id', type=int)
+        suppliers = Supplier.query.all()
+        month_labels = []
+        today = date.today()
+        for i in range(5, -1, -1):
+            m_date = today - relativedelta(months=i)
+            month_labels.append(f'{m_date.year}-{m_date.month:02d}')
+
+        wb = Workbook()
+        for s in suppliers:
+            if supplier_filter and s.id != supplier_filter:
+                continue
+            ws = wb.create_sheet(title=s.name[:20])
+            headers = ['月份', '已付金额', '未付金额', '逾期未付', '合计']
+            ws.append(headers)
+            style_header(ws, 1, len(headers))
+            monthly = s.get_monthly_payment_summary(6)
+            row = 2
+            total_paid = 0
+            total_unpaid = 0
+            total_overdue = 0
+            for month_key in month_labels:
+                mdata = monthly.get(month_key, {'paid': 0, 'unpaid': 0, 'overdue_unpaid': 0})
+                paid = mdata['paid']
+                unpaid = mdata['unpaid']
+                overdue = mdata['overdue_unpaid']
+                total_paid += paid
+                total_unpaid += unpaid
+                total_overdue += overdue
+                ws.append([month_key, paid, unpaid, overdue, paid + unpaid])
+                row += 1
+            ws.append(['合计', total_paid, total_unpaid, total_overdue, total_paid + total_unpaid])
+            ws.cell(row=row, column=1).font = Font(bold=True)
+            style_body(ws, 2, row, len(headers))
+            for i, w in enumerate([14, 14, 14, 14, 14], 1):
+                ws.column_dimensions[chr(64 + i)].width = w
+
+        if 'Sheet' in wb.sheetnames:
+            del wb['Sheet']
+
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        filename = f'月度付款分析_{date.today().strftime("%Y%m%d")}.xlsx'
         return send_file(output, as_attachment=True, download_name=filename,
                          mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 

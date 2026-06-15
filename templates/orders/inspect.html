@@ -68,7 +68,11 @@
                             <td>{{ insp.receipt.receipt_no }}</td>
                             <td class="text-success">{{ insp.qualified_quantity }}</td>
                             <td class="{% if insp.unqualified_quantity > 0 %}text-danger font-bold{% endif %}">{{ insp.unqualified_quantity }}</td>
-                            <td class="text-small">{{ insp.defect_reasons or '-' }}</td>
+                            <td class="text-small">
+                                {% if insp.defect_reasons %}<span class="text-danger">{{ insp.defect_reasons }}</span>{% endif %}
+                                {% if insp.defect_detail %}<br><span class="text-muted">↳ {{ insp.defect_detail }}</span>{% endif %}
+                                {% if not insp.defect_reasons and not insp.defect_detail %}-{% endif %}
+                            </td>
                             <td>¥{{ '%.2f'|format(insp.get_inspection_amount()) }}</td>
                             <td>{{ insp.inspector }}</td>
                             <td class="text-small">{{ insp.created_at.strftime('%m-%d %H:%M') }}</td>
@@ -98,16 +102,24 @@
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label>不合格原因（可多选，如有不合格）</label>
+                <div class="form-group" id="defect_reason_group">
+                    <label class="required">不合格原因（不合格数量 &gt; 0 时必填）</label>
                     <div class="checkbox-group">
                         {% for d in defect_options %}
                         <label class="checkbox-item">
-                            <input type="checkbox" name="defect_reasons" value="{{ d }}">
+                            <input type="checkbox" name="defect_reasons" value="{{ d }}" class="defect-checkbox" onchange="checkDefectRequired()">
                             <span>{{ d }}</span>
                         </label>
                         {% endfor %}
                     </div>
+                    <div id="defect_reason_alert" style="display:none;color:#c0392b;font-size:13px;margin-top:8px">
+                        ⚠️ 不合格数量大于0时，必须至少勾选一项不合格原因
+                    </div>
+                </div>
+
+                <div class="form-group" id="defect_detail_group" style="display:none">
+                    <label>不合格补充说明</label>
+                    <textarea name="defect_detail" class="form-control" placeholder="详细描述不合格情况、影响范围、返工方案等..." rows="3"></textarea>
                 </div>
 
                 <div class="form-group">
@@ -129,7 +141,7 @@
                 </div>
 
                 <div class="form-actions">
-                    <button type="submit" class="btn btn-primary" style="padding:10px 40px">✅ 提交质检结果</button>
+                    <button type="submit" class="btn btn-primary" style="padding:10px 40px" onclick="return validateInspection()">✅ 提交质检结果</button>
                     {% if order %}
                     <a href="{{ url_for('view_order', order_id=order.id) }}" class="btn btn-secondary">取消</a>
                     {% endif %}
@@ -184,7 +196,47 @@ function updateDiff() {
         check.textContent = '✗ 数量不符：合计 ' + total + ' 件，应等于 ' + target + ' 件（差 ' + (target - total) + ' 件）';
     }
     document.getElementById('payable_amt').textContent = '¥' + (q * price).toFixed(2);
+    checkDefectRequired();
 }
+
+function checkDefectRequired() {
+    const u = parseInt(document.getElementById('unqualified').value) || 0;
+    const checked = document.querySelectorAll('.defect-checkbox:checked').length;
+    const alertEl = document.getElementById('defect_reason_alert');
+    const detailGroup = document.getElementById('defect_detail_group');
+    const reasonGroup = document.getElementById('defect_reason_group');
+
+    if (u > 0) {
+        detailGroup.style.display = 'block';
+        reasonGroup.querySelector('label').classList.add('required');
+        if (checked === 0) {
+            alertEl.style.display = 'block';
+        } else {
+            alertEl.style.display = 'none';
+        }
+    } else {
+        detailGroup.style.display = 'none';
+        alertEl.style.display = 'none';
+    }
+}
+
+function validateInspection() {
+    const u = parseInt(document.getElementById('unqualified').value) || 0;
+    const checked = document.querySelectorAll('.defect-checkbox:checked').length;
+    const q = parseInt(document.getElementById('qualified').value) || 0;
+    const target = {{ pending }};
+
+    if (q + u !== target) {
+        alert('合格数量 + 不合格数量必须等于待检数量 ' + target + ' 件');
+        return false;
+    }
+    if (u > 0 && checked === 0) {
+        alert('不合格数量大于0时，必须至少勾选一项不合格原因');
+        return false;
+    }
+    return true;
+}
+
 updateDiff();
 </script>
 {% endblock %}

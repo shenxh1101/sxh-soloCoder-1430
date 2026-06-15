@@ -164,7 +164,11 @@
                                                 <td class="font-bold">{{ insp.inspection_no }}</td>
                                                 <td class="text-success">{{ insp.qualified_quantity }}</td>
                                                 <td class="{% if insp.unqualified_quantity > 0 %}text-danger font-bold{% endif %}">{{ insp.unqualified_quantity }}</td>
-                                                <td class="text-small">{{ insp.defect_reasons or '-' }}</td>
+                                                <td class="text-small">
+                                                    {% if insp.defect_reasons %}<span class="text-danger">{{ insp.defect_reasons }}</span>{% endif %}
+                                                    {% if insp.defect_detail %}<br><span class="text-muted">↳ {{ insp.defect_detail }}</span>{% endif %}
+                                                    {% if not insp.defect_reasons and not insp.defect_detail %}-{% endif %}
+                                                </td>
                                                 <td>¥{{ '%.2f'|format(insp.get_inspection_amount()) }}</td>
                                                 <td>{{ insp.inspector }}</td>
                                                 <td class="text-small">{{ insp.created_at.strftime('%m-%d %H:%M') }}</td>
@@ -177,6 +181,36 @@
                         </tr>
                         {% endif %}
                     {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if order.get_defect_summary() %}
+        <div class="card" style="border-left:4px solid #e74c3c">
+            <div class="card-header"><h2>⚠️ 不合格品汇总 ({{ order.get_defect_summary()|length }} 批次)</h2></div>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>质检单号</th>
+                            <th>收货单号</th>
+                            <th>不合格数量</th>
+                            <th>不合格原因</th>
+                            <th>补充说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in order.get_defect_summary() %}
+                        <tr>
+                            <td class="font-bold">{{ d.inspection_no }}</td>
+                            <td>{{ d.receipt_no }}</td>
+                            <td class="text-danger font-bold">{{ d.unqualified }} 件</td>
+                            <td class="text-danger">{{ d.reasons }}</td>
+                            <td class="text-muted text-small">{{ d.detail or '-' }}</td>
+                        </tr>
+                        {% endfor %}
                     </tbody>
                 </table>
             </div>
@@ -281,10 +315,18 @@
                     <a href="{{ url_for('create_payment', order_id=order.id) }}" class="btn btn-primary" style="text-align:center">💰 申请付款</a>
                     {% endif %}
                     {% if order.status == '质检完成' %}
-                    <form method="post" action="{{ url_for('update_order_status', order_id=order.id) }}" onsubmit="return confirm('确认标记订单为已完成？')">
-                        <input type="hidden" name="status" value="已完成">
-                        <button type="submit" class="btn btn-secondary" style="width:100%">✅ 标记完成</button>
-                    </form>
+                    <div class="card" style="margin:0;background:linear-gradient(135deg,#fff3e0,#ffe0b2);border:1px solid #ffb74d;padding:12px">
+                        <div class="text-small" style="color:#e65100;line-height:1.8">
+                            <strong>💡 结算提示：</strong>订单需完成付款后才可关闭<br>
+                            {% if order.is_overdue_for_payment() %}
+                            <span class="text-danger">⚠️ 该订单质检完成已超30天，请尽快申请付款！</span><br>
+                            {% endif %}
+                            路径：申请付款 → 审批通过 → 确认付款 → 订单自动关闭
+                            {% if not order.payment_requests %}
+                            <br>当前状态：<strong>待申请付款</strong>
+                            {% endif %}
+                        </div>
+                    </div>
                     {% endif %}
                 {% endif %}
 

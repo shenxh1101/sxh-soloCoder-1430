@@ -91,7 +91,11 @@
                             <td>{{ insp.receipt.receipt_no }}</td>
                             <td class="text-success">{{ insp.qualified_quantity }}</td>
                             <td class="text-warning">{{ insp.unqualified_quantity }}</td>
-                            <td class="text-danger text-small">{{ insp.defect_reasons or '-' }}</td>
+                            <td class="text-small">
+                                {% if insp.defect_reasons %}<span class="text-danger">{{ insp.defect_reasons }}</span>{% endif %}
+                                {% if insp.defect_detail %}<br><span class="text-muted">↳ {{ insp.defect_detail }}</span>{% endif %}
+                                {% if not insp.defect_reasons and not insp.defect_detail %}-{% endif %}
+                            </td>
                             <td>{{ insp.inspector or '-' }}</td>
                             <td class="text-small">{{ insp.created_at.strftime('%m-%d %H:%M') }}</td>
                         </tr>

@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% block title %}月度付款分析 - 外协订单管理系统{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>💳 月度付款分析</h1>
+    <div class="actions">
+        <a href="{{ url_for('export_payment_monthly') }}{% if supplier_filter %}?supplier_id={{ supplier_filter }}{% endif %}" class="btn btn-success">📊 导出月结报表</a>
+    </div>
+</div>
+
+<div class="filter-bar">
+    <form method="get" class="flex gap-10 flex-wrap align-center" style="width:100%">
+        <div class="form-group">
+            <label>外协厂</label>
+            <select name="supplier_id" class="form-control" onchange="this.form.submit()">
+                <option value="">全部外协厂</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}" {% if supplier_filter == s.id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card" style="background:linear-gradient(135deg,#43e97b 0%,#38f9d7 100%)">
+        <div class="stat-icon">✅</div>
+        <div class="stat-content">
+            <div class="stat-label">已付金额</div>
+            <div class="stat-value">¥{{ '%.2f'|format(totals.paid) }}</div>
+        </div>
+    </div>
+    <div class="stat-card" style="background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)">
+        <div class="stat-icon">📋</div>
+        <div class="stat-content">
+            <div class="stat-label">未付金额</div>
+            <div class="stat-value">¥{{ '%.2f'|format(totals.unpaid) }}</div>
+        </div>
+    </div>
+    <div class="stat-card" style="background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%)">
+        <div class="stat-icon">⚠️</div>
+        <div class="stat-content">
+            <div class="stat-label">逾期未付</div>
+            <div class="stat-value">¥{{ '%.2f'|format(totals.overdue) }}</div>
+        </div>
+    </div>
+</div>
+
+{% for data in analysis_data %}
+{% set s = data.supplier %}
+<div class="card">
+    <div class="card-header">
+        <h2>🏢 {{ s.name }}</h2>
+        <div class="flex gap-10">
+            <span class="badge" style="background:#43e97b;color:white">已付 ¥{{ '%.2f'|format(data.total_paid) }}</span>
+            <span class="badge" style="background:#4facfe;color:white">未付 ¥{{ '%.2f'|format(data.total_unpaid) }}</span>
+            {% if data.total_overdue > 0 %}
+            <span class="badge" style="background:#f5576c;color:white">逾期 ¥{{ '%.2f'|format(data.total_overdue) }}</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="trend-chart-container">
+        <div class="trend-chart">
+            <div class="chart-y-axis">
+                {% set amt_max = data.amt_max %}
+                <span>¥{{ '%.0f'|format(amt_max) }}</span><span>¥{{ '%.0f'|format(amt_max*0.8) }}</span><span>¥{{ '%.0f'|format(amt_max*0.6) }}</span><span>¥{{ '%.0f'|format(amt_max*0.4) }}</span><span>¥{{ '%.0f'|format(amt_max*0.2) }}</span><span>0</span>
+            </div>
+            <div class="chart-area">
+                <div class="chart-grid-lines"></div>
+                <div class="chart-bars">
+                    {% for month in month_labels %}
+                    {% set mdata = data.monthly.get(month, {'paid':0,'unpaid':0,'overdue_unpaid':0}) %}
+                    {% set paid_pct = (mdata.paid / amt_max * 100) if amt_max > 0 else 0 %}
+                    {% set unpaid_pct = (mdata.unpaid / amt_max * 100) if amt_max > 0 else 0 %}
+                    <div class="chart-bar-group">
+                        <div class="chart-bar-pair">
+                            <div class="chart-bar bar-paid" style="height:{{ paid_pct }}%"
+                                 title="已付: ¥{{ '%.2f'|format(mdata.paid) }}">
+                                <span class="bar-label">{% if mdata.paid > 0 %}{{ '%.0f'|format(mdata.paid/1000) }}k{% endif %}</span>
+                            </div>
+                            <div class="chart-bar bar-unpaid {% if mdata.overdue_unpaid > 0 %}bar-overdue{% endif %}" style="height:{{ unpaid_pct }}%"
+                                 title="未付: ¥{{ '%.2f'|format(mdata.unpaid) }}{% if mdata.overdue_unpaid > 0 %} (逾期¥{{ '%.2f'|format(mdata.overdue_unpaid) }}){% endif %}">
+                                <span class="bar-label">{% if mdata.unpaid > 0 %}{{ '%.0f'|format(mdata.unpaid/1000) }}k{% endif %}</span>
+                            </div>
+                        </div>
+                        <div class="chart-bar-label">{{ month[-5:] }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="chart-legend-inline">
+            <span class="legend-item"><span class="legend-color" style="background:#43e97b"></span> 已付</span>
+            <span class="legend-item"><span class="legend-color" style="background:#4facfe"></span> 未付</span>
+            <span class="legend-item"><span class="legend-color" style="background:#f5576c"></span> 逾期未付</span>
+        </div>
+    </div>
+
+    <div class="table-wrapper" style="margin-top:15px">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>月份</th>
+                    <th>已付金额</th>
+                    <th>未付金额</th>
+                    <th>其中逾期</th>
+                    <th>合计</th>
+                    <th>付款率</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for month in month_labels %}
+                {% set mdata = data.monthly.get(month, {'paid':0,'unpaid':0,'overdue_unpaid':0}) %}
+                {% set total = mdata.paid + mdata.unpaid %}
+                <tr>
+                    <td class="font-bold">{{ month }}</td>
+                    <td class="text-success">¥{{ '%.2f'|format(mdata.paid) }}</td>
+                    <td class="{% if mdata.overdue_unpaid > 0 %}text-danger font-bold{% else %}text-primary{% endif %}">¥{{ '%.2f'|format(mdata.unpaid) }}</td>
+                    <td>
+                        {% if mdata.overdue_unpaid > 0 %}
+                        <span class="text-danger font-bold">¥{{ '%.2f'|format(mdata.overdue_unpaid) }}</span>
+                        <span class="badge" style="background:#fde8e8;color:#c0392b;margin-left:5px">逾期</span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-bold">¥{{ '%.2f'|format(total) }}</td>
+                    <td>
+                        {% if total > 0 %}
+                        {% set rate = mdata.paid / total * 100 %}
+                        <div class="rate-bar" style="min-width:80px;display:inline-block;vertical-align:middle;width:100px">
+                            <div class="rate-fill {% if rate >= 80 %}rate-good{% elif rate >= 50 %}rate-medium{% else %}rate-poor{% endif %}" style="width:{{ rate }}%"></div>
+                        </div>
+                        <span class="{% if rate >= 80 %}text-success{% elif rate >= 50 %}text-warning{% else %}text-danger{% endif %}" style="margin-left:8px">{{ '%.1f'|format(rate) }}%</span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endfor %}
+
+<div class="card">
+    <div class="card-header"><h2>💡 说明</h2></div>
+    <div class="form-row">
+        <div>
+            <h4 style="margin-bottom:10px;color:#43e97b">✅ 已付</h4>
+            <p class="text-small" style="color:#555;line-height:1.8">
+                当月完成付款的订单金额<br>
+                付款完成 = 订单关闭
+            </p>
+        </div>
+        <div>
+            <h4 style="margin-bottom:10px;color:#4facfe">📋 未付</h4>
+            <p class="text-small" style="color:#555;line-height:1.8">
+                质检完成但尚未付款的订单金额<br>
+                包括待申请、待审批、待付款
+            </p>
+        </div>
+        <div>
+            <h4 style="margin-bottom:10px;color:#f5576c">⚠️ 逾期未付</h4>
+            <p class="text-small" style="color:#555;line-height:1.8">
+                约定交货日期+30天后仍未付款的金额<br>
+                需优先安排资金结算
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
