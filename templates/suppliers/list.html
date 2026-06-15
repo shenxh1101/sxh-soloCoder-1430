@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% block title %}外协厂管理 - 外协订单管理系统{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>🏢 外协厂管理</h1>
+    <div class="actions">
+        <a href="{{ url_for('export_unsettled_orders') }}" class="btn btn-secondary">📥 导出未结订单</a>
+        <a href="{{ url_for('export_payables') }}" class="btn btn-success">📊 导出应付款明细</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>外协厂名称</th>
+                    <th>联系人</th>
+                    <th>联系电话</th>
+                    <th>地址</th>
+                    <th>月产能</th>
+                    <th>当前未完成</th>
+                    <th>产能利用率</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in supplier_stats %}
+            {% set s = item.supplier %}
+                <tr>
+                    <td class="font-bold">{{ s.name }}</td>
+                    <td>{{ s.contact or '-' }}</td>
+                    <td>{{ s.phone or '-' }}</td>
+                    <td>{{ s.address or '-' }}</td>
+                    <td>{{ s.monthly_capacity }} 件</td>
+                    <td>
+                        <span class="{% if item.overloaded %}text-danger font-bold{% else %}text-success{% endif %}">
+                            {{ item.pending_qty }} 件
+                        </span>
+                    </td>
+                    <td>
+                        <div style="min-width:120px">
+                            <div class="rate-bar">
+                                {% set ratio = (item.pending_qty / s.monthly_capacity * 100) if s.monthly_capacity > 0 else 0 %}
+                                <div class="rate-fill {% if ratio >= 100 %}rate-poor{% elif ratio >= 80 %}rate-medium{% else %}rate-good{% endif %}"
+                                     style="width:{{ [ratio, 100]|min }}%"></div>
+                            </div>
+                            <div class="text-small text-muted mt-10">{{ item.capacity_ratio }}</div>
+                        </div>
+                    </td>
+                    <td>
+                        {% if item.overloaded %}
+                        <span class="badge" style="background:#fde8e8;color:#c0392b">⚠️ 产能过载</span>
+                        {% else %}
+                        <span class="badge badge-completed">✓ 正常</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn btn-outline btn-sm" onclick="editSupplier({{ s.id }}, '{{ s.name }}', '{{ s.contact or '' }}', '{{ s.phone or '' }}', '{{ s.address or '' }}', {{ s.monthly_capacity }})">
+                            ✏️ 编辑
+                        </button>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 编辑弹窗 -->
+<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;align-items:center;justify-content:center">
+    <div style="background:white;border-radius:10px;padding:30px;width:500px;max-width:90vw">
+        <h3 style="margin-bottom:20px">✏️ 编辑外协厂信息</h3>
+        <form id="editForm" method="post">
+            <div class="form-group">
+                <label>外协厂名称</label>
+                <input type="text" id="modal_name" class="form-control" readonly>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>联系人</label>
+                    <input type="text" name="contact" id="modal_contact" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>联系电话</label>
+                    <input type="text" name="phone" id="modal_phone" class="form-control">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>月产能（件）</label>
+                <input type="number" name="monthly_capacity" id="modal_capacity" class="form-control" min="1" required>
+            </div>
+            <div class="form-group">
+                <label>地址</label>
+                <input type="text" name="address" id="modal_address" class="form-control">
+            </div>
+            <div class="form-actions" style="justify-content:flex-end">
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('editModal').style.display='none'">取消</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function editSupplier(id, name, contact, phone, address, capacity) {
+    document.getElementById('editForm').action = '/suppliers/' + id + '/edit-capacity';
+    document.getElementById('modal_name').value = name;
+    document.getElementById('modal_contact').value = contact;
+    document.getElementById('modal_phone').value = phone;
+    document.getElementById('modal_address').value = address;
+    document.getElementById('modal_capacity').value = capacity;
+    document.getElementById('editModal').style.display = 'flex';
+}
+</script>
+{% endblock %}

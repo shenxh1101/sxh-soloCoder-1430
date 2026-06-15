@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}创建委外订单 - 外协订单管理系统{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>➕ 创建委外订单</h1>
+    <div class="actions">
+        <a href="{{ url_for('list_orders') }}" class="btn btn-secondary">← 返回列表</a>
+    </div>
+</div>
+
+<div class="card">
+    <form method="post">
+        <div class="form-row">
+            <div class="form-group">
+                <label class="required">外协厂</label>
+                <select name="supplier_id" id="supplier_id" class="form-control" required onchange="checkCapacity()">
+                    <option value="">-- 请选择外协厂 --</option>
+                    {% for s in suppliers %}
+                    <option value="{{ s.id }}">{{ s.name }} (月产能: {{ s.monthly_capacity }}件)</option>
+                    {% endfor %}
+                </select>
+                <div id="capacity_info" class="text-small mt-10"></div>
+            </div>
+            <div class="form-group">
+                <label class="required">零件图号</label>
+                <input type="text" name="drawing_no" class="form-control" placeholder="如: DJ-2024-A001" required>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>零件名称</label>
+                <input type="text" name="part_name" class="form-control" placeholder="如: 法兰盘">
+            </div>
+            <div class="form-group">
+                <label class="required">数量</label>
+                <input type="number" name="quantity" id="quantity" class="form-control" min="1" value="100" required oninput="calculateTotal()">
+            </div>
+            <div class="form-group">
+                <label class="required">加工单价（元）</label>
+                <input type="number" name="unit_price" id="unit_price" class="form-control" step="0.01" min="0" value="0" required oninput="calculateTotal()">
+            </div>
+            <div class="form-group">
+                <label>订单总金额</label>
+                <div id="total_amount" class="form-control" style="background:#f8f9fa;font-weight:600;color:#27ae60">¥0.00</div>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="required">约定交货日期</label>
+                <input type="date" name="agreed_delivery_date" class="form-control" required>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>备注</label>
+            <textarea name="remark" class="form-control" placeholder="加工要求、特殊说明等..."></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary" style="padding:10px 30px">✅ 提交订单</button>
+            <a href="{{ url_for('list_orders') }}" class="btn btn-secondary">取消</a>
+        </div>
+    </form>
+</div>
+
+<script>
+function calculateTotal() {
+    const qty = parseFloat(document.getElementById('quantity').value) || 0;
+    const price = parseFloat(document.getElementById('unit_price').value) || 0;
+    document.getElementById('total_amount').textContent = '¥' + (qty * price).toFixed(2);
+}
+
+async function checkCapacity() {
+    const id = document.getElementById('supplier_id').value;
+    const info = document.getElementById('capacity_info');
+    if (!id) { info.innerHTML = ''; return; }
+    try {
+        const res = await fetch('/api/suppliers/' + id + '/capacity');
+        const data = await res.json();
+        if (data.overloaded) {
+            info.innerHTML = `⚠️ <span style="color:#c0392b">${data.supplier} 当前未完成${data.pending}件，已超出月产能${data.capacity}件！</span>`;
+        } else {
+            info.innerHTML = `✓ ${data.supplier} 当前未完成${data.pending}件，剩余产能约${data.available}件`;
+        }
+    } catch(e) {}
+}
+calculateTotal();
+</script>
+{% endblock %}

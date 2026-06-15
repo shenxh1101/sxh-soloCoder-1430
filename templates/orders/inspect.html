@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% block title %}质检 - {{ order.order_no }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>🔍 入厂质检</h1>
+    <div class="actions">
+        <a href="{{ url_for('view_order', order_id=order.id) }}" class="btn btn-secondary">← 返回详情</a>
+    </div>
+</div>
+
+<div class="detail-grid">
+    <div>
+        <div class="card">
+            <div class="card-header"><h2>📋 订单信息</h2></div>
+            <div class="detail-section">
+                <div class="detail-row"><span class="label">订单号</span><span class="value font-bold">{{ order.order_no }}</span></div>
+                <div class="detail-row"><span class="label">外协厂</span><span class="value">{{ order.supplier.name }}</span></div>
+                <div class="detail-row"><span class="label">零件图号</span><span class="value">{{ order.drawing_no }}{% if order.part_name %} · {{ order.part_name }}{% endif %}</span></div>
+                <div class="detail-row"><span class="label">到货数量</span><span class="value font-bold text-large">{{ order.quantity }} 件</span></div>
+                <div class="detail-row"><span class="label">加工单价</span><span class="value">¥{{ '%.2f'|format(order.unit_price) }}</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h2>✅ 质检登记</h2></div>
+            <form method="post">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="required">合格数量</label>
+                        <input type="number" name="qualified_quantity" id="qualified" class="form-control" min="0" max="{{ order.quantity }}" value="{{ order.quantity }}" required oninput="updateDiff()">
+                    </div>
+                    <div class="form-group">
+                        <label class="required">不合格数量</label>
+                        <input type="number" name="unqualified_quantity" id="unqualified" class="form-control" min="0" max="{{ order.quantity }}" value="0" required oninput="updateDiff()">
+                    </div>
+                    <div class="form-group">
+                        <label>合计校验</label>
+                        <div id="diff_check" class="form-control" style="background:#e8f5e9;color:#27ae60;font-weight:600">✓ 数量正确 (总计 {{ order.quantity }} 件)</div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>不合格原因（可多选，如有不合格）</label>
+                    <div class="checkbox-group">
+                        {% for d in defect_options %}
+                        <label class="checkbox-item">
+                            <input type="checkbox" name="defect_reasons" value="{{ d }}">
+                            <span>{{ d }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top:15px;background:#f8f9fa;border:1px dashed #dee2e6">
+                    <div class="detail-row"><span class="label">应付加工费（预估）</span>
+                        <span id="payable_amt" class="value text-success text-large font-bold">¥{{ '%.2f'|format(order.quantity * order.unit_price) }}</span>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" style="padding:10px 40px">✅ 提交质检结果</button>
+                    <a href="{{ url_for('view_order', order_id=order.id) }}" class="btn btn-secondary">取消</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-header"><h2>💡 填写说明</h2></div>
+            <div style="font-size:14px;line-height:2;color:#555">
+                <p>1. <strong>合格数量 + 不合格数量</strong> 必须等于订单数量 <strong>{{ order.quantity }}</strong> 件</p>
+                <p>2. 应付加工费 = <span class="text-success">合格数量</span> × 加工单价</p>
+                <p>3. 不合格品不计加工费，请如实填写</p>
+                <p>4. 若存在不合格品，请勾选对应的不合格原因</p>
+                <p>5. 一次合格率用于外协厂绩效评估</p>
+                <hr style="margin:15px 0;border:none;border-top:1px dashed #ddd">
+                <div class="text-small text-muted">
+                    <strong>常用不合格项说明：</strong><br>
+                    • 尺寸超差：零件尺寸超出图纸公差<br>
+                    • 表面划伤：加工或运输过程中表面损伤<br>
+                    • 变形：零件发生弯曲、扭曲等形变<br>
+                    • 材质不符：材料牌号/硬度不符合要求<br>
+                    • 热处理不合格：淬火/回火等工艺不达标
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateDiff() {
+    const q = parseInt(document.getElementById('qualified').value) || 0;
+    const u = parseInt(document.getElementById('unqualified').value) || 0;
+    const total = q + u;
+    const target = {{ order.quantity }};
+    const check = document.getElementById('diff_check');
+    const price = {{ order.unit_price }};
+
+    if (total === target) {
+        check.style.background = '#e8f5e9';
+        check.style.color = '#27ae60';
+        check.textContent = '✓ 数量正确 (总计 ' + total + ' 件)';
+    } else {
+        check.style.background = '#fde8e8';
+        check.style.color = '#c0392b';
+        check.textContent = '✗ 数量不符：当前合计 ' + total + ' 件，应等于 ' + target + ' 件（差 ' + (target - total) + ' 件）';
+    }
+    document.getElementById('payable_amt').textContent = '¥' + (q * price).toFixed(2);
+}
+updateDiff();
+</script>
+{% endblock %}

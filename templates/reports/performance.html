@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+{% block title %}外协厂绩效报告 - 外协订单管理系统{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>📈 外协厂绩效报告</h1>
+    <div class="actions">
+        <a href="{{ url_for('export_unsettled_orders') }}" class="btn btn-secondary">📥 导出未结订单</a>
+        <a href="{{ url_for('export_payables') }}" class="btn btn-success">📊 导出应付款</a>
+    </div>
+</div>
+
+<div class="filter-bar">
+    <form method="get" class="flex gap-10 flex-wrap align-center" style="width:100%">
+        <div class="form-group">
+            <label>起始日期</label>
+            <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+        </div>
+        <div class="form-group">
+            <label>结束日期</label>
+            <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+        </div>
+        <div class="form-group">
+            <button type="submit" class="btn btn-primary">🔍 生成报告</button>
+            <a href="{{ url_for('performance_report') }}" class="btn btn-secondary">重置</a>
+        </div>
+    </form>
+</div>
+
+<div class="report-summary">
+    <strong>📊 统计范围：</strong>
+    {{ start_date or '全部历史' }} 至 {{ end_date or '今日' }}
+    ，共 {{ report_data|sum(attribute='total_orders') }} 个订单，
+    累计完成金额 ¥{{ '%.2f'|format(report_data|sum(attribute='total_value')) }}
+</div>
+
+<div class="card">
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>外协厂</th>
+                    <th>总订单数</th>
+                    <th>已完成</th>
+                    <th>按时交付率</th>
+                    <th>一次合格率</th>
+                    <th>平均加工周期</th>
+                    <th>完成金额</th>
+                    <th>综合评级</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in report_data %}
+            {% set s = item.supplier %}
+                <tr>
+                    <td class="font-bold">{{ s.name }}</td>
+                    <td>{{ item.total_orders }}</td>
+                    <td>
+                        <span class="{% if item.completed_orders > 0 %}text-success{% else %}text-muted{% endif %}">
+                            {{ item.completed_orders }}
+                        </span>
+                        {% if item.total_orders > 0 %}
+                        <span class="text-muted text-small">
+                            ({{ '%.0f'|format(item.completed_orders / item.total_orders * 100) }}%)
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td style="min-width:180px">
+                        <div class="flex space-between align-center">
+                            <span class="font-bold {% if item.on_time_rate >= 95 %}text-success{% elif item.on_time_rate >= 80 %}text-warning{% else %}text-danger{% endif %}">
+                                {{ '%.1f'|format(item.on_time_rate) }}%
+                            </span>
+                            <span class="text-small text-muted">{{ item.on_time_count }}/{{ item.completed_orders }}</span>
+                        </div>
+                        <div class="rate-bar">
+                            <div class="rate-fill {% if item.on_time_rate >= 95 %}rate-good{% elif item.on_time_rate >= 80 %}rate-medium{% else %}rate-poor{% endif %}"
+                                 style="width:{{ item.on_time_rate }}%"></div>
+                        </div>
+                    </td>
+                    <td style="min-width:180px">
+                        <div class="flex space-between align-center">
+                            <span class="font-bold {% if item.first_pass_rate >= 95 %}text-success{% elif item.first_pass_rate >= 80 %}text-warning{% else %}text-danger{% endif %}">
+                                {{ '%.1f'|format(item.first_pass_rate) }}%
+                            </span>
+                            <span class="text-small text-muted">{{ item.first_pass_count }}/{{ item.inspected_count }}</span>
+                        </div>
+                        <div class="rate-bar">
+                            <div class="rate-fill {% if item.first_pass_rate >= 95 %}rate-good{% elif item.first_pass_rate >= 80 %}rate-medium{% else %}rate-poor{% endif %}"
+                                 style="width:{{ item.first_pass_rate }}%"></div>
+                        </div>
+                    </td>
+                    <td>
+                        {% if item.avg_cycle > 0 %}
+                        <span class="font-bold">{{ '%.1f'|format(item.avg_cycle) }} 天</span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-bold text-success">¥{{ '%.2f'|format(item.total_value) }}</td>
+                    <td>
+                        {% set score = (item.on_time_rate * 0.4 + item.first_pass_rate * 0.4 + (100 - (item.avg_cycle * 2 if item.avg_cycle > 0 else 0)) * 0.2) %}
+                        {% if item.completed_orders == 0 %}
+                            <span class="badge" style="background:#f5f5f5;color:#999">暂无数据</span>
+                        {% elif score >= 90 %}
+                            <span class="badge badge-completed">🏆 A级 (优秀)</span>
+                        {% elif score >= 80 %}
+                            <span class="badge badge-approved">👍 B级 (良好)</span>
+                        {% elif score >= 70 %}
+                            <span class="badge badge-pending">📌 C级 (一般)</span>
+                        {% else %}
+                            <span class="badge badge-production">⚠️ D级 (待改进)</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr style="background:#fafbfc">
+                    <td colspan="8" style="padding:8px 20px">
+                        <div class="flex gap-10 flex-wrap text-small">
+                            <span class="text-muted">📋 详细指标：</span>
+                            <span>按时交付 <strong class="text-success">{{ item.on_time_count }}</strong> 单</span>
+                            <span>延期交付 <strong class="text-danger">{{ item.completed_orders - item.on_time_count }}</strong> 单</span>
+                            <span>一次合格 <strong class="text-success">{{ item.first_pass_count }}</strong> 单</span>
+                            <span>不合格 <strong class="text-warning">{{ item.inspected_count - item.first_pass_count }}</strong> 单</span>
+                            <span>联系人：{{ s.contact or '-' }}</span>
+                            <span>电话：{{ s.phone or '-' }}</span>
+                        </div>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h2>💡 指标说明</h2></div>
+    <div class="form-row">
+        <div>
+            <h4 style="margin-bottom:10px;color:#2c3e50">📅 按时交付率</h4>
+            <p class="text-small" style="color:#555;line-height:1.8">
+                按时交付订单数 ÷ 总已完成订单数 × 100%<br>
+                以质检完成日期与约定交货日期比较<br>
+                <span class="text-success">≥95% 优秀</span> / 
+                <span class="text-warning">≥80% 良好</span> / 
+                <span class="text-danger">＜80% 需关注</span>
+            </p>
+        </div>
+        <div>
+            <h4 style="margin-bottom:10px;color:#2c3e50">✅ 一次合格率</h4>
+            <p class="text-small" style="color:#555;line-height:1.8">
+                一次质检合格订单数 ÷ 质检订单数 × 100%<br>
+                不合格数量为0视为一次合格<br>
+                <span class="text-success">≥95% 优秀</span> / 
+                <span class="text-warning">≥80% 良好</span> / 
+                <span class="text-danger">＜80% 需改进</span>
+            </p>
+        </div>
+        <div>
+            <h4 style="margin-bottom:10px;color:#2c3e50">⏱️ 平均加工周期</h4>
+            <p class="text-small" style="color:#555;line-height:1.8">
+                从接单到质检完成的平均天数<br>
+                反映外协厂的加工效率<br>
+                周期越短说明加工效率越高
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

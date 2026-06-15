@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block login_content %}
+<div class="login-wrapper">
+    <div class="login-box">
+        <h1>🏭 外协订单管理系统</h1>
+        <div class="subtitle">委外加工全流程管理平台</div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="flash {{ category }}" style="margin-bottom:15px">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+        <form method="post">
+            <div class="form-group">
+                <label class="required">用户名</label>
+                <input type="text" name="username" class="form-control" placeholder="请输入用户名" required autofocus>
+            </div>
+            <div class="form-group">
+                <label class="required">密码</label>
+                <input type="password" name="password" class="form-control" placeholder="请输入密码" required>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;padding:12px;margin-top:10px">登 录</button>
+        </form>
+        <div style="margin-top:25px;padding-top:20px;border-top:1px solid #eee">
+            <div class="text-muted text-small mb-10"><strong>演示账号：</strong></div>
+            <div class="text-small" style="color:#555;line-height:2">
+                企业管理员：admin / admin123<br>
+                外协厂精诚：jingcheng / jc123456<br>
+                外协厂宏远：hongyuan / hy123456<br>
+                外协厂顺达：shunda / sd123456
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

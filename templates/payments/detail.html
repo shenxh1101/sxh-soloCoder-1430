@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% block title %}付款申请 - {{ payment.request_no }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>💰 付款申请单</h1>
+    <div class="actions">
+        <a href="{{ url_for('list_payments') }}" class="btn btn-secondary">← 返回列表</a>
+    </div>
+</div>
+
+<div class="detail-grid">
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <h2>📝 申请信息</h2>
+                <div>
+                    {% set pc = {'待审批':'badge-pending', '已审批':'badge-approved', '已付款':'badge-paid'} %}
+                    <span class="badge {{ pc.get(payment.status, '') }}" style="font-size:14px;padding:6px 16px">{{ payment.status }}</span>
+                </div>
+            </div>
+            <div class="detail-section">
+                <div class="detail-row"><span class="label">申请单号</span><span class="value font-bold text-large">{{ payment.request_no }}</span></div>
+                <div class="detail-row"><span class="label">外协厂</span><span class="value font-bold">{{ payment.supplier.name }}</span></div>
+                <div class="detail-row"><span class="label">联系人/电话</span><span class="value">{{ payment.supplier.contact or '-' }} / {{ payment.supplier.phone or '-' }}</span></div>
+                <div class="detail-row"><span class="label">关联订单</span>
+                    <span class="value"><a href="{{ url_for('view_order', order_id=payment.order_id) }}">{{ payment.order.order_no }}</a></span>
+                </div>
+                <div class="detail-row"><span class="label">零件信息</span><span class="value">{{ payment.order.drawing_no }}{% if payment.order.part_name %} · {{ payment.order.part_name }}{% endif %}</span></div>
+                <div class="detail-row"><span class="label">申请金额</span><span class="value text-success text-large font-bold">¥{{ '%.2f'|format(payment.amount) }}</span></div>
+                {% if payment.remark %}
+                <div class="detail-row"><span class="label">备注</span><span class="value">{{ payment.remark }}</span></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h2>📋 审批流程</h2></div>
+            <div class="timeline">
+                <div class="timeline-item done">
+                    <div class="time">{{ payment.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                    <div class="status-text">📝 申请提交：{{ payment.applicant }}</div>
+                </div>
+                {% if payment.approved_at %}
+                <div class="timeline-item done">
+                    <div class="time">{{ payment.approved_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                    <div class="status-text">✓ 审批通过：{{ payment.approver }}</div>
+                </div>
+                {% elif payment.status == '待审批' %}
+                <div class="timeline-item current">
+                    <div class="status-text">⏳ 等待审批中...</div>
+                </div>
+                {% endif %}
+                {% if payment.paid_at %}
+                <div class="timeline-item done">
+                    <div class="time">{{ payment.paid_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                    <div class="status-text">💳 付款完成</div>
+                </div>
+                {% elif payment.status == '已审批' %}
+                <div class="timeline-item current">
+                    <div class="status-text">⏳ 等待付款...</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-header"><h2>⚡ 操作</h2></div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+                {% if payment.status == '待审批' %}
+                <form method="post" action="{{ url_for('approve_payment', payment_id=payment.id) }}">
+                    <button type="submit" class="btn btn-primary" style="width:100%">✓ 审批通过</button>
+                </form>
+                {% endif %}
+                {% if payment.status == '已审批' %}
+                <form method="post" action="{{ url_for('pay_payment', payment_id=payment.id) }}" onsubmit="return confirm('确认已付款？此操作将标记订单为已完成。')">
+                    <button type="submit" class="btn btn-success" style="width:100%">💳 确认付款</button>
+                </form>
+                {% endif %}
+                <a href="{{ url_for('view_order', order_id=payment.order_id) }}" class="btn btn-outline" style="text-align:center">📋 查看关联订单</a>
+            </div>
+        </div>
+
+        <div class="card" style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);border:1px solid #90caf9">
+            <div class="text-small text-muted mb-10">付款金额明细</div>
+            <div class="text-large font-bold" style="color:#1565c0">¥{{ '%.2f'|format(payment.amount) }}</div>
+            <hr style="border:none;border-top:1px dashed #64b5f6;margin:10px 0">
+            <div class="text-small" style="color:#1565c0;line-height:1.8">
+                订单数量：{{ payment.order.quantity }} 件<br>
+                合格数量：{{ payment.order.inspections.qualified_quantity if payment.order.inspections else 0 }} 件<br>
+                加工单价：¥{{ '%.2f'|format(payment.order.unit_price) }}<br>
+                计算公式：合格数量 × 单价
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

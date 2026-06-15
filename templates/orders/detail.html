@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% block title %}订单详情 - {{ order.order_no }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>📋 订单详情</h1>
+    <div class="actions">
+        <a href="{{ url_for('list_orders') }}" class="btn btn-secondary">← 返回列表</a>
+    </div>
+</div>
+
+<div class="detail-grid">
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <h2>📝 订单信息</h2>
+                <div>
+                    {% set badge_class = {
+                        '已下单':'badge-ordered', '已接单':'badge-accepted',
+                        '生产中':'badge-production', '已发货':'badge-shipped',
+                        '已到货':'badge-arrived', '质检完成':'badge-inspected', '已完成':'badge-completed'
+                    } %}
+                    <span class="badge {{ badge_class.get(order.status, '') }}" style="font-size:14px;padding:6px 16px">
+                        {{ order.status }}
+                    </span>
+                </div>
+            </div>
+            <div class="detail-section">
+                <div class="detail-row"><span class="label">订单号</span><span class="value font-bold text-large">{{ order.order_no }}</span></div>
+                <div class="detail-row"><span class="label">外协厂</span><span class="value">{{ order.supplier.name }}</span></div>
+                <div class="detail-row"><span class="label">零件图号</span><span class="value">{{ order.drawing_no }}</span></div>
+                <div class="detail-row"><span class="label">零件名称</span><span class="value">{{ order.part_name or '-' }}</span></div>
+                <div class="detail-row"><span class="label">订单数量</span><span class="value">{{ order.quantity }} 件</span></div>
+                <div class="detail-row"><span class="label">加工单价</span><span class="value">¥{{ '%.2f'|format(order.unit_price) }}</span></div>
+                <div class="detail-row"><span class="label">订单总金额</span><span class="value text-success text-large font-bold">¥{{ '%.2f'|format(order.get_total_amount()) }}</span></div>
+                <div class="detail-row"><span class="label">约定交货日期</span>
+                    <span class="value">
+                        {{ order.agreed_delivery_date.strftime('%Y年%m月%d日') }}
+                        {% set today = order.agreed_delivery_date.today() %}
+                        {% if order.status not in ['质检完成', '已完成'] and order.agreed_delivery_date < today %}
+                        <span class="badge" style="background:#fde8e8;color:#c0392b;margin-left:8px">已逾期 {{ (today - order.agreed_delivery_date).days }} 天</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="detail-row"><span class="label">下单时间</span><span class="value">{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</span></div>
+                {% if order.remark %}
+                <div class="detail-row"><span class="label">备注</span><span class="value">{{ order.remark }}</span></div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if order.inspections %}
+        <div class="card">
+            <div class="card-header">
+                <h2>🔍 质检报告</h2>
+                <span class="badge badge-inspected" style="font-size:13px">已完成</span>
+            </div>
+            <div class="detail-section">
+                <div class="detail-row"><span class="label">质检时间</span><span class="value">{{ order.inspections.created_at.strftime('%Y-%m-%d %H:%M') }}</span></div>
+                <div class="detail-row"><span class="label">质检员</span><span class="value">{{ order.inspections.inspector }}</span></div>
+                <div class="detail-row"><span class="label">合格数量</span><span class="value text-success font-bold">{{ order.inspections.qualified_quantity }} 件</span></div>
+                <div class="detail-row"><span class="label">不合格数量</span>
+                    <span class="value {% if order.inspections.unqualified_quantity > 0 %}text-danger font-bold{% endif %}">
+                        {{ order.inspections.unqualified_quantity }} 件
+                    </span>
+                </div>
+                {% if order.inspections.defect_reasons %}
+                <div class="detail-row"><span class="label">不合格原因</span>
+                    <span class="value text-danger">
+                        {% for r in order.inspections.defect_reasons.split(',') %}
+                        <span style="display:inline-block;background:#fde8e8;padding:2px 10px;border-radius:10px;margin:2px">{{ r }}</span>
+                        {% endfor %}
+                    </span>
+                </div>
+                {% endif %}
+                <div class="detail-row"><span class="label">应付加工费</span>
+                    <span class="value text-success text-large font-bold">¥{{ '%.2f'|format(order.get_payable_amount()) }}</span>
+                </div>
+                <div class="detail-row"><span class="label">一次合格率</span>
+                    <span class="value">
+                        {% if order.inspections.is_first_pass() %}
+                        <span class="badge badge-completed">✓ 一次合格</span>
+                        {% else %}
+                        <span class="badge badge-production">需返修/返工</span>
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if order.payment_requests %}
+        <div class="card">
+            <div class="card-header">
+                <h2>💰 付款记录</h2>
+            </div>
+            {% for pr in order.payment_requests %}
+            <div class="detail-section" style="{% if not loop.last %}border-bottom:2px solid #ecf0f1;padding-bottom:15px;margin-bottom:15px{% endif %}">
+                <div class="detail-row"><span class="label">申请单号</span>
+                    <span class="value font-bold">
+                        <a href="{{ url_for('view_payment', payment_id=pr.id) }}">{{ pr.request_no }}</a>
+                    </span>
+                </div>
+                <div class="detail-row"><span class="label">申请状态</span>
+                    <span class="value">
+                        {% set pc = {'待审批':'badge-pending', '已审批':'badge-approved', '已付款':'badge-paid'} %}
+                        <span class="badge {{ pc.get(pr.status, '') }}">{{ pr.status }}</span>
+                    </span>
+                </div>
+                <div class="detail-row"><span class="label">申请金额</span><span class="value text-success font-bold">¥{{ '%.2f'|format(pr.amount) }}</span></div>
+                <div class="detail-row"><span class="label">申请人</span><span class="value">{{ pr.applicant }}</span></div>
+                {% if pr.approver %}<div class="detail-row"><span class="label">审批人</span><span class="value">{{ pr.approver }}</span></div>{% endif %}
+                <div class="detail-row"><span class="label">申请时间</span><span class="value">{{ pr.created_at.strftime('%Y-%m-%d %H:%M') }}</span></div>
+                {% if pr.paid_at %}<div class="detail-row"><span class="label">付款时间</span><span class="value">{{ pr.paid_at.strftime('%Y-%m-%d %H:%M') }}</span></div>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-header"><h2>🔄 状态流转</h2></div>
+            <div class="timeline">
+                {% set steps = [
+                    ('已下单', order.created_at, order.status in ['已下单','已接单','生产中','已发货','已到货','质检完成','已完成']),
+                    ('已接单', order.accepted_at, order.status in ['已接单','生产中','已发货','已到货','质检完成','已完成']),
+                    ('生产中', order.production_at, order.status in ['生产中','已发货','已到货','质检完成','已完成']),
+                    ('已发货', order.shipped_at, order.status in ['已发货','已到货','质检完成','已完成']),
+                    ('已到货', order.arrived_at, order.status in ['已到货','质检完成','已完成']),
+                    ('质检完成', order.inspected_at, order.status in ['质检完成','已完成']),
+                    ('已完成', order.completed_at, order.status == '已完成'),
+                ] %}
+                {% for status, time, done in steps %}
+                {% set is_current = order.status == status %}
+                <div class="timeline-item {% if done and not is_current %}done{% elif is_current %}current{% endif %}">
+                    {% if time %}<div class="time">{{ time.strftime('%Y-%m-%d %H:%M') }}</div>{% endif %}
+                    <div class="status-text">
+                        {{ status }}
+                        {% if is_current %}<span style="color:#3498db;margin-left:6px">● 当前状态</span>{% endif %}
+                        {% if not time and not is_current %}<span class="text-muted" style="margin-left:6px">（待处理）</span>{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h2>⚡ 快捷操作</h2></div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+                {% if current_user.role == 'supplier' and order.supplier_id == current_user.supplier_id %}
+                    {% if order.status == '已下单' %}
+                    <form method="post" action="{{ url_for('update_order_status', order_id=order.id) }}">
+                        <input type="hidden" name="status" value="已接单">
+                        <button type="submit" class="btn btn-success" style="width:100%">📨 确认接单</button>
+                    </form>
+                    {% elif order.status == '已接单' %}
+                    <form method="post" action="{{ url_for('update_order_status', order_id=order.id) }}">
+                        <input type="hidden" name="status" value="生产中">
+                        <button type="submit" class="btn btn-primary" style="width:100%">⚙️ 开始生产</button>
+                    </form>
+                    {% elif order.status == '生产中' %}
+                    <form method="post" action="{{ url_for('update_order_status', order_id=order.id) }}">
+                        <input type="hidden" name="status" value="已发货">
+                        <button type="submit" class="btn btn-warning" style="width:100%">🚚 标记发货</button>
+                    </form>
+                    {% endif %}
+                {% endif %}
+
+                {% if current_user.role == 'enterprise' %}
+                    {% if order.status == '已下单' %}
+                    <a href="{{ url_for('edit_order', order_id=order.id) }}" class="btn btn-warning" style="text-align:center">✏️ 编辑订单</a>
+                    <form method="post" action="{{ url_for('delete_order', order_id=order.id) }}" onsubmit="return confirm('确认删除此订单？')">
+                        <button type="submit" class="btn btn-danger" style="width:100%">🗑️ 删除订单</button>
+                    </form>
+                    {% endif %}
+                    {% if order.status == '已发货' %}
+                    <form method="post" action="{{ url_for('update_order_status', order_id=order.id) }}">
+                        <input type="hidden" name="status" value="已到货">
+                        <button type="submit" class="btn btn-info" style="width:100%">📦 确认到货</button>
+                    </form>
+                    {% endif %}
+                    {% if order.status == '已到货' %}
+                    <a href="{{ url_for('inspect_order', order_id=order.id) }}" class="btn btn-info" style="text-align:center">🔍 进行质检</a>
+                    {% endif %}
+                    {% if order.status == '质检完成' and not order.payment_requests %}
+                    <a href="{{ url_for('create_payment', order_id=order.id) }}" class="btn btn-success" style="text-align:center">💰 申请付款</a>
+                    {% endif %}
+                    {% if order.status == '质检完成' %}
+                    <form method="post" action="{{ url_for('update_order_status', order_id=order.id) }}" onsubmit="return confirm('确认标记订单为已完成？')">
+                        <input type="hidden" name="status" value="已完成">
+                        <button type="submit" class="btn btn-secondary" style="width:100%">✅ 标记完成</button>
+                    </form>
+                    {% endif %}
+                {% endif %}
+                {% if order.status in ['质检完成', '已完成'] %}
+                <div class="card" style="margin:0;background:linear-gradient(135deg,#f0fff4,#e8f5e9);padding:15px;border:1px solid #c8e6c9">
+                    <div class="text-small text-muted">应付加工费</div>
+                    <div class="text-large font-bold text-success">¥{{ '%.2f'|format(order.get_payable_amount()) }}</div>
+                    {% if order.get_processing_days() > 0 %}
+                    <div class="text-small text-muted mt-10">实际加工周期：{{ order.get_processing_days() }} 天</div>
+                    {% endif %}
+                    {% if order.is_on_time() is sameas true %}
+                    <div class="text-small text-success mt-10">✓ 按时交付</div>
+                    {% elif order.is_on_time() is sameas false %}
+                    <div class="text-small text-danger mt-10">✗ 逾期交付</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

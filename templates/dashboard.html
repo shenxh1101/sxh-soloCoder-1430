@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% block title %}首页 - 外协订单管理系统{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>📊 工作台概览</h1>
+</div>
+
+{% if current_user.role == 'enterprise' %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-icon">📋</span>
+        <div class="stat-label">订单总数</div>
+        <div class="stat-value">{{ stats.total_orders }}</div>
+    </div>
+    <div class="stat-card orange">
+        <span class="stat-icon">⏳</span>
+        <div class="stat-label">进行中订单</div>
+        <div class="stat-value">{{ stats.pending_orders }}</div>
+    </div>
+    <div class="stat-card purple">
+        <span class="stat-icon">🚚</span>
+        <div class="stat-label">运输中订单</div>
+        <div class="stat-value">{{ stats.shipping_orders }}</div>
+    </div>
+    <div class="stat-card red">
+        <span class="stat-icon">🔍</span>
+        <div class="stat-label">待质检订单</div>
+        <div class="stat-value">{{ stats.inspection_orders }}</div>
+    </div>
+    <div class="stat-card green">
+        <span class="stat-icon">✅</span>
+        <div class="stat-label">已完成订单</div>
+        <div class="stat-value">{{ stats.completed_orders }}</div>
+    </div>
+    <div class="stat-card">
+        <span class="stat-icon">💰</span>
+        <div class="stat-label">累计应付金额</div>
+        <div class="stat-value" style="font-size:22px">¥{{ '%.2f'|format(stats.total_payable) }}</div>
+    </div>
+    <div class="stat-card orange">
+        <span class="stat-icon">💳</span>
+        <div class="stat-label">待付款金额</div>
+        <div class="stat-value" style="font-size:22px">¥{{ '%.2f'|format(stats.pending_payment) }}</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>📥 快捷操作</h2>
+    </div>
+    <div class="flex gap-10 flex-wrap">
+        <a href="{{ url_for('create_order') }}" class="btn btn-primary">➕ 创建委外订单</a>
+        <a href="{{ url_for('list_orders') }}?status=已到货" class="btn btn-warning">🔍 待质检 ({{ stats.inspection_orders }})</a>
+        <a href="{{ url_for('list_orders') }}?status=已发货" class="btn btn-info">🚚 运输中 ({{ stats.shipping_orders }})</a>
+        <a href="{{ url_for('export_unsettled_orders') }}" class="btn btn-secondary">📥 导出未结订单</a>
+        <a href="{{ url_for('export_payables') }}" class="btn btn-success">📊 导出应付款明细</a>
+    </div>
+</div>
+{% else %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-icon">📋</span>
+        <div class="stat-label">订单总数</div>
+        <div class="stat-value">{{ stats.total_orders }}</div>
+    </div>
+    <div class="stat-card red">
+        <span class="stat-icon">📨</span>
+        <div class="stat-label">待接单</div>
+        <div class="stat-value">{{ stats.new_orders }}</div>
+    </div>
+    <div class="stat-card orange">
+        <span class="stat-icon">⚙️</span>
+        <div class="stat-label">生产中</div>
+        <div class="stat-value">{{ stats.in_production }}</div>
+    </div>
+    <div class="stat-card purple">
+        <span class="stat-icon">🚚</span>
+        <div class="stat-label">已发货</div>
+        <div class="stat-value">{{ stats.shipped }}</div>
+    </div>
+    <div class="stat-card green">
+        <span class="stat-icon">✅</span>
+        <div class="stat-label">已完成</div>
+        <div class="stat-value">{{ stats.completed }}</div>
+    </div>
+    <div class="stat-card">
+        <span class="stat-icon">💰</span>
+        <div class="stat-label">待收款金额</div>
+        <div class="stat-value" style="font-size:22px">¥{{ '%.2f'|format(stats.pending_amount) }}</div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header flex space-between align-center">
+        <h2>🕒 最近订单</h2>
+        <a href="{{ url_for('list_orders') }}" class="btn btn-outline btn-sm">查看全部 →</a>
+    </div>
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>订单号</th>
+                    {% if current_user.role == 'enterprise' %}<th>外协厂</th>{% endif %}
+                    <th>零件图号</th>
+                    <th>数量</th>
+                    <th>金额</th>
+                    <th>交货日期</th>
+                    <th>状态</th>
+                    <th>下单时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for o in recent_orders %}
+                <tr>
+                    <td class="font-bold">{{ o.order_no }}</td>
+                    {% if current_user.role == 'enterprise' %}<td>{{ o.supplier.name }}</td>{% endif %}
+                    <td>{{ o.drawing_no }}{% if o.part_name %}<br><span class="text-muted text-small">{{ o.part_name }}</span>{% endif %}</td>
+                    <td>{{ o.quantity }}</td>
+                    <td>¥{{ '%.2f'|format(o.get_total_amount()) }}</td>
+                    <td>{{ o.agreed_delivery_date.strftime('%m-%d') }}</td>
+                    <td>
+                        {% set badge_class = {
+                            '已下单':'badge-ordered', '已接单':'badge-accepted',
+                            '生产中':'badge-production', '已发货':'badge-shipped',
+                            '已到货':'badge-arrived', '质检完成':'badge-inspected', '已完成':'badge-completed'
+                        } %}
+                        <span class="badge {{ badge_class.get(o.status, '') }}">{{ o.status }}</span>
+                    </td>
+                    <td>{{ o.created_at.strftime('%m-%d %H:%M') }}</td>
+                    <td><a href="{{ url_for('view_order', order_id=o.id) }}" class="btn btn-outline btn-sm">查看</a></td>
+                </tr>
+            {% endfor %}
+            {% if not recent_orders %}
+                <tr><td colspan="9" class="text-center text-muted">暂无订单数据</td></tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

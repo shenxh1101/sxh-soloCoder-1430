@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}编辑订单 - {{ order.order_no }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>✏️ 编辑订单</h1>
+    <div class="actions">
+        <a href="{{ url_for('view_order', order_id=order.id) }}" class="btn btn-secondary">← 返回详情</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="mb-20" style="padding:12px 18px;background:#fff8e1;border-left:4px solid #f39c12;border-radius:4px">
+        <strong>订单号：</strong>{{ order.order_no }}　
+        <strong>当前状态：</strong><span class="badge badge-ordered">{{ order.status }}</span>
+        <span class="text-small text-muted">（仅"已下单"状态的订单可编辑）</span>
+    </div>
+    <form method="post">
+        <div class="form-row">
+            <div class="form-group">
+                <label class="required">外协厂</label>
+                <select name="supplier_id" class="form-control" required>
+                    {% for s in suppliers %}
+                    <option value="{{ s.id }}" {% if order.supplier_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="required">零件图号</label>
+                <input type="text" name="drawing_no" class="form-control" value="{{ order.drawing_no }}" required>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>零件名称</label>
+                <input type="text" name="part_name" class="form-control" value="{{ order.part_name or '' }}">
+            </div>
+            <div class="form-group">
+                <label class="required">数量</label>
+                <input type="number" name="quantity" class="form-control" min="1" value="{{ order.quantity }}" required>
+            </div>
+            <div class="form-group">
+                <label class="required">加工单价（元）</label>
+                <input type="number" name="unit_price" class="form-control" step="0.01" min="0" value="{{ order.unit_price }}" required>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="required">约定交货日期</label>
+                <input type="date" name="agreed_delivery_date" class="form-control" value="{{ order.agreed_delivery_date.strftime('%Y-%m-%d') }}" required>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>备注</label>
+            <textarea name="remark" class="form-control">{{ order.remark or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">💾 保存修改</button>
+            <a href="{{ url_for('view_order', order_id=order.id) }}" class="btn btn-secondary">取消</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
